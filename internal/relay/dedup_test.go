@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
-// IPXTransporter – Author: mlapointe
+// IPXTransporter – Author: Mark LaPointe <mark@cloudbsd.org>
 // Unit tests for deduplication logic
 
 package relay

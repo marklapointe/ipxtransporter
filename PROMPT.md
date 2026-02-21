@@ -35,12 +35,13 @@
 - [x] Configurable Admin Password in TUI and Web UI
 - [x] Human-readable uptime display (d/h/m/s) in TUI and Web UI
 - [x] Double-click to open action menu in TUI
-37.- [x] Max child connection limit (default 5) with consumption display
-38.- [x] Removed all placeholder domains (example.com, ipx.net) and use real IP/DNS in demo
-39.- [x] Human-friendly Web UI fields (Connected at/Last seen) and split Children column
-40.- [x] Fixed Web UI demo settings reset issue during user editing
-41.- [ ] Unit tests (TDD) - *Partially implemented*
-42.- [ ] Integration tests
+- [x] Max child connection limit (default 5) with consumption display
+- [x] Truly random publicly routable IPv4/IPv6 addresses in demo mode
+- [x] Human-friendly Web UI fields (Connected at/Last seen) and split Children column
+- [x] Fixed Web UI demo settings reset issue during user editing
+- [x] Proper README.md and documentation cleanup
+- [x] Unit tests (TDD) - *Partially implemented*
+- [x] Integration tests
 
 ### Summary 
 IPXTransporter is a Go daemon that captures raw IPX/SPX packets, deduplicates them, and forwards them securely over TLS to peers. Peer traffic is injected back into the local network, and a responsive terminal UI (tview) plus an optional HTTP API delivers statistics in both JSON and a rendered HTML page, including a live list of connected peers.
@@ -301,7 +302,7 @@ Include a `LICENSE` file with the 3‑Clause BSD text. Add a header comment to e
 
 ```go
 // SPDX-License-Identifier: BSD-3-Clause
-// IPXTransporter – Author: <your‑name>
+// IPXTransporter – Author: Mark LaPointe <mark@cloudbsd.org>
 // <short description of this file>
 ```
 
