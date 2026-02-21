@@ -35,11 +35,6 @@ func (d *DedupCache) IsDuplicate(data []byte) bool {
 	hash := sha256.Sum256(data)
 	key := string(hash[:])
 
-	if d.cache.Contains(key) {
-		return true
-	}
-	d.cache.Add(key, true)
-	// LRU doesn't have native TTL, but we can simulate it by storing time.
-	// Or just rely on LRU eviction for size management.
-	return false
+	ok, _ := d.cache.ContainsOrAdd(key, true)
+	return ok
 }

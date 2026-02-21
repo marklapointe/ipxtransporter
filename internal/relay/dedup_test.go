@@ -40,23 +40,25 @@ func TestDedupCache(t *testing.T) {
 	p2 := []byte("p2")
 	p3 := []byte("p3")
 
-	smallCache.IsDuplicate(p1)
-	smallCache.IsDuplicate(p2)
-
-	if !smallCache.IsDuplicate(p1) {
-		t.Error("Expected p1 to be in cache")
+	// 1. Add p1
+	if smallCache.IsDuplicate(p1) {
+		t.Error("p1 should not be duplicate")
 	}
-
-	// Add p3, p1 should be evicted (LRU) or p2 if we just added p1 again
-	// smallCache.IsDuplicate(p1) was called, so p2 is now the oldest.
-	smallCache.IsDuplicate(p3)
-
-	if !smallCache.IsDuplicate(p3) {
-		t.Error("Expected p3 to be in cache")
-	}
-
-	// p2 should be evicted
+	// 2. Add p2
 	if smallCache.IsDuplicate(p2) {
-		t.Error("Expected p2 to be evicted from cache")
+		t.Error("p2 should not be duplicate")
+	}
+	// 3. Mark p2 as newest
+	if !smallCache.IsDuplicate(p2) {
+		t.Error("p2 should be duplicate")
+	}
+	// 4. Add p3 (should evict p1)
+	if smallCache.IsDuplicate(p3) {
+		t.Error("p3 should not be duplicate")
+	}
+
+	// 5. Check if p1 was evicted
+	if smallCache.IsDuplicate(p1) {
+		t.Error("p1 should have been evicted")
 	}
 }

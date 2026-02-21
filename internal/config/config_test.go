@@ -28,7 +28,12 @@ func TestLoadConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func(name string) {
+		err := os.Remove(name)
+		if err != nil {
+			return
+		}
+	}(tmpFile.Name())
 
 	if _, err := tmpFile.Write([]byte(content)); err != nil {
 		t.Fatal(err)

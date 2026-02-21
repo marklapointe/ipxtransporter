@@ -60,6 +60,9 @@ This project follows Test-Driven Development (TDD) principles. Core logic is cov
 1. **Deduplication (`internal/relay/dedup_test.go`)**: Verifies the LRU-based deduplication and eviction.
 2. **Configuration (`internal/config/config_test.go`)**: Ensures defaults are applied and JSON loading works correctly.
 3. **Statistics (`internal/stats/stats_test.go`)**: Validates data aggregation and model integrity.
+4. **Logging (`internal/logger/logger_test.go`)**: Verifies thread-safe log buffering and retrieval.
+5. **Peer Management (`internal/peer/peer_test.go`)**: Tests the network key authentication handshake.
+6. **Relay Server (`internal/relay/server_test.go`)**: Tests configuration updates, banning, and demo simulation.
 
 *Note: Tests requiring `libpcap` may fail if the library is not installed on the build machine. Use mock-based or isolated tests for core logic.*
 

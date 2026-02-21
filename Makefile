@@ -71,7 +71,7 @@ run-demo: build
 demo: run-demo
 
 test:
-	go test ./internal/config ./internal/stats
+	go test ./internal/config ./internal/stats ./internal/logger ./internal/peer ./internal/relay
 
 fmt:
 	go fmt ./...

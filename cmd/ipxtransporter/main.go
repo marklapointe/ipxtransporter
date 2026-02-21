@@ -6,10 +6,11 @@ package main
 
 import (
 	"context"
-	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 
 	"github.com/mlapointe/ipxtransporter/internal/api"
 	"github.com/mlapointe/ipxtransporter/internal/config"

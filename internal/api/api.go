@@ -8,12 +8,13 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"html/template"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 
 	"github.com/mlapointe/ipxtransporter/internal/config"
 	"github.com/mlapointe/ipxtransporter/internal/relay"
@@ -107,7 +108,10 @@ func (a *API) statsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s)
+		err := json.NewEncoder(w).Encode(s)
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -141,12 +145,15 @@ func (a *API) loginHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": true,
 			"token":   tokenString,
 		})
 	} else {
-		json.NewEncoder(w).Encode(map[string]any{"success": false})
+		err := json.NewEncoder(w).Encode(map[string]any{"success": false})
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -173,7 +180,10 @@ func (a *API) actionHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unknown action", http.StatusBadRequest)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]any{"success": true})
+	err := json.NewEncoder(w).Encode(map[string]any{"success": true})
+	if err != nil {
+		return
+	}
 }
 
 func (a *API) demoHandler(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +194,10 @@ func (a *API) demoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.srv.UpdateDemoProps(req.PacketRate, req.DropRate, req.ErrorRate, req.NumPeers)
-	json.NewEncoder(w).Encode(map[string]any{"success": true})
+	err := json.NewEncoder(w).Encode(map[string]any{"success": true})
+	if err != nil {
+		return
+	}
 }
 
 func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +214,10 @@ func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.srv.UpdateConfig(req.AdminPass, req.MaxChildren, req.NetworkKey, req.RebalanceEnabled, req.RebalanceInterval)
-	json.NewEncoder(w).Encode(map[string]any{"success": true})
+	err := json.NewEncoder(w).Encode(map[string]any{"success": true})
+	if err != nil {
+		return
+	}
 }
 
 func (a *API) addPeerHandler(w http.ResponseWriter, r *http.Request) {
@@ -219,5 +235,8 @@ func (a *API) addPeerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.srv.AddPeer(r.Context(), req.Addr)
-	json.NewEncoder(w).Encode(map[string]any{"success": true})
+	err := json.NewEncoder(w).Encode(map[string]any{"success": true})
+	if err != nil {
+		return
+	}
 }
