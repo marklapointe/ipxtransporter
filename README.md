@@ -70,6 +70,7 @@ make build
 - `F3`: Peer WHOIS Details
 - `F4`: UI Settings (Sorting)
 - `F5`: Demo Mode Settings (Demo mode only)
+- `F6`: Manual Peer Addition
 - `Enter`: Peer Action Menu
 - `+/-`: Traffic Graph Zoom
 - `Ctrl+C`: Graceful Exit
@@ -89,7 +90,8 @@ A sample configuration file (`/etc/ipxtransporter.json`):
   "http_listen_addr": ":8080",
   "admin_user": "admin",
   "admin_pass": "admin",
-  "max_children": 5
+  "max_children": 5,
+  "network_key": "secret-key"
 }
 ```
 

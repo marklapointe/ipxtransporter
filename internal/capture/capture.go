@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
-	"log"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 )
 
 type Capturer struct {
@@ -38,7 +38,7 @@ func (c *Capturer) Start(ctx context.Context, packetChan chan<- []byte) error {
 	c.handle = handle
 
 	if err := handle.SetBPFFilter(filter); err != nil {
-		log.Printf("Warning: failed to set BPF filter: %v", err)
+		logger.Info("Warning: failed to set BPF filter: %v", err)
 	}
 
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())

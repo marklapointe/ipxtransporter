@@ -15,6 +15,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/mlapointe/ipxtransporter/internal/capture"
 	"github.com/mlapointe/ipxtransporter/internal/config"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"github.com/mlapointe/ipxtransporter/internal/stats"
 	"github.com/rivo/tview"
 )
@@ -26,6 +27,7 @@ type TUI struct {
 	table         *tview.Table
 	mapView       *tview.TextView
 	graphView     *tview.TextView
+	logView       *tview.TextView
 	statCards     *tview.TextView
 	statsFunc     func() stats.Stats
 	cfg           *config.Config
@@ -38,15 +40,16 @@ type TUI struct {
 	onDemoUpdate  func(packetRate, dropRate, errorRate, numPeers int)
 	onDisconnect  func(id string)
 	onBan         func(id, ip string)
+	onAddPeer     func(ctx context.Context, addr string)
 	lastClickTime time.Time
 	lastClickRow  int
 }
 
 func NewTUI(statsFunc func() stats.Stats, cfg *config.Config, configPath string) *TUI {
-	return NewTUIWithDemo(statsFunc, cfg, configPath, nil, nil, nil)
+	return NewTUIWithDemo(statsFunc, cfg, configPath, nil, nil, nil, nil)
 }
 
-func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath string, onDemoUpdate func(packetRate, dropRate, errorRate, numPeers int), onDisconnect func(id string), onBan func(id, ip string)) *TUI {
+func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath string, onDemoUpdate func(packetRate, dropRate, errorRate, numPeers int), onDisconnect func(id string), onBan func(id, ip string), onAddPeer func(ctx context.Context, addr string)) *TUI {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
 
@@ -65,6 +68,15 @@ func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath
 		SetTitle("Network Topology").
 		SetBorder(true)
 
+	logView := tview.NewTextView().
+		SetDynamicColors(true).
+		SetRegions(true).
+		SetWordWrap(true).
+		SetChangedFunc(func() {
+			app.Draw()
+		})
+	logView.SetBorder(true).SetTitle("System Logs")
+
 	graphView := tview.NewTextView().
 		SetDynamicColors(true).
 		SetWrap(false)
@@ -76,6 +88,7 @@ func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath
 		table:        table,
 		mapView:      mapView,
 		graphView:    graphView,
+		logView:      logView,
 		statCards:    statCards,
 		statsFunc:    statsFunc,
 		cfg:          cfg,
@@ -86,6 +99,7 @@ func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath
 		onDemoUpdate: onDemoUpdate,
 		onDisconnect: onDisconnect,
 		onBan:        onBan,
+		onAddPeer:    onAddPeer,
 	}
 
 	table.SetSelectedFunc(func(row, column int) {
@@ -112,7 +126,10 @@ func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath
 		SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(table, 0, 1, true).
-			AddItem(mapView, 66, 0, false), 0, 1, true).
+			AddItem(tview.NewFlex().
+				SetDirection(tview.FlexRow).
+				AddItem(mapView, 0, 1, false).
+				AddItem(logView, 10, 0, false), 66, 0, false), 0, 1, true).
 		AddItem(graphView, 10, 0, false).
 		AddItem(statCards, 2, 1, false)
 
@@ -145,6 +162,10 @@ func NewTUIWithDemo(statsFunc func() stats.Stats, cfg *config.Config, configPath
 		}
 		if event.Key() == tcell.KeyF5 && tuiInstance.statsFunc().DemoProps != nil {
 			tuiInstance.showDemoSettings()
+			return nil
+		}
+		if event.Key() == tcell.KeyF6 {
+			tuiInstance.showAddPeerDialog()
 			return nil
 		}
 		if event.Rune() == '+' || event.Key() == tcell.KeyRight {
@@ -201,7 +222,7 @@ func (t *TUI) update() {
 	}
 
 	t.statCards.SetText(fmt.Sprintf(
-		"[yellow]RX: [white]%-10s [yellow]TX: [white]%-10s [yellow]Drop: [white]%-10s [yellow]Err: [white]%-10s [yellow]Up: [white]%-10s%s%s\n[blue]F1: Config  F2: Iface  F3: Whois  F4: Settings  %s+/-: Zoom  Enter: Actions  Ctrl+C: Exit",
+		"[yellow]RX: [white]%-10s [yellow]TX: [white]%-10s [yellow]Drop: [white]%-10s [yellow]Err: [white]%-10s [yellow]Up: [white]%-10s%s%s\n[blue]F1: Config  F2: Iface  F3: Whois  F4: Settings  F6: Add Peer  %s+/-: Zoom  Enter: Actions  Ctrl+C: Exit",
 		formatPkts(s.TotalReceived), formatPkts(s.TotalForwarded), formatPkts(s.TotalDropped), formatPkts(s.TotalErrors), s.UptimeStr, errorMsg, listenInfo, demoKey,
 	))
 
@@ -210,6 +231,9 @@ func (t *TUI) update() {
 
 	// Update Map
 	t.drawMap(s.Peers)
+
+	// Update Logs
+	t.updateLogs(s.Logs)
 
 	// Update table
 	t.table.Clear()
@@ -425,6 +449,7 @@ func (t *TUI) showConfigEditor() {
 		AddCheckbox("Enable HTTP", t.cfg.EnableHTTP, func(checked bool) { t.cfg.EnableHTTP = checked }).
 		AddCheckbox("Disable SSL", t.cfg.DisableSSL, func(checked bool) { t.cfg.DisableSSL = checked }).
 		AddPasswordField("Admin Password", t.cfg.AdminPass, 20, '*', func(text string) { t.cfg.AdminPass = text }).
+		AddInputField("Network Key", t.cfg.NetworkKey, 20, nil, func(text string) { t.cfg.NetworkKey = text }).
 		AddInputField("Max Children", fmt.Sprintf("%d", t.cfg.MaxChildren), 5, tview.InputFieldInteger, func(text string) {
 			fmt.Sscanf(text, "%d", &t.cfg.MaxChildren)
 		}).
@@ -706,6 +731,30 @@ func (t *TUI) showPeerActions(row int) {
 	t.pages.AddPage("peer_actions", t.center(list, 40, 12), true, true)
 }
 
+func (t *TUI) showAddPeerDialog() {
+	if t.onAddPeer == nil {
+		return
+	}
+	var form *tview.Form
+	form = tview.NewForm().
+		AddInputField("Peer Address", "", 40, nil, nil).
+		AddButton("Add", func() {
+			item := form.GetFormItem(0)
+			if input, ok := item.(*tview.InputField); ok {
+				addr := input.GetText()
+				if addr != "" {
+					t.onAddPeer(context.Background(), addr)
+				}
+			}
+			t.pages.RemovePage("add_peer")
+		}).
+		AddButton("Cancel", func() {
+			t.pages.RemovePage("add_peer")
+		})
+	form.SetBorder(true).SetTitle("Add New Peer")
+	t.pages.AddPage("add_peer", t.center(form, 60, 9), true, true)
+}
+
 func (t *TUI) drawMap(peers []stats.PeerStat) {
 	// Node Topology Map
 	byParent := make(map[string][]stats.PeerStat)
@@ -741,6 +790,21 @@ func (t *TUI) drawMap(peers []stats.PeerStat) {
 	}
 
 	t.mapView.SetText(buildTree("Local", ""))
+}
+
+func (t *TUI) updateLogs(logs []logger.LogMessage) {
+	text := ""
+	for _, l := range logs {
+		color := "white"
+		if l.Level == "ERROR" || l.Level == "FATAL" {
+			color = "red"
+		} else if l.Level == "INFO" {
+			color = "green"
+		}
+		text += fmt.Sprintf("[%s]%s: %s[-]\n", color, l.Timestamp.Format("15:04:05"), l.Message)
+	}
+	t.logView.SetText(text)
+	t.logView.ScrollToEnd()
 }
 
 func (t *TUI) center(p tview.Primitive, width, height int) tview.Primitive {

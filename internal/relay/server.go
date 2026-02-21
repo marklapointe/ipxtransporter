@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/mlapointe/ipxtransporter/internal/capture"
 	"github.com/mlapointe/ipxtransporter/internal/config"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"github.com/mlapointe/ipxtransporter/internal/peer"
 	"github.com/mlapointe/ipxtransporter/internal/stats"
 )
@@ -41,6 +41,7 @@ type Server struct {
 	demoErrorRate  int
 	demoNumPeers   int
 	demoPeersMu    sync.RWMutex
+	peerRelayChan  chan []byte
 }
 
 func NewServer(cfg *config.Config, configPath string) (*Server, error) {
@@ -60,6 +61,7 @@ func NewServer(cfg *config.Config, configPath string) (*Server, error) {
 		demoDropRate:   3,
 		demoErrorRate:  10,
 		demoNumPeers:   5,
+		peerRelayChan:  make(chan []byte, 1000),
 	}, nil
 }
 
@@ -69,21 +71,20 @@ func (s *Server) Start(ctx context.Context) error {
 		return nil
 	}
 	packetChan := make(chan []byte, 1000)
-	peerRelayChan := make(chan []byte, 1000)
 
 	if err := s.capturer.Start(ctx, packetChan); err != nil {
-		log.Printf("Capture error: %v", err)
+		logger.Error("Capture error: %v", err)
 		s.captureError.Store(err.Error())
 	} else {
 		s.captureError.Store("")
 	}
 
 	// Listen for incoming peer connections
-	go s.listenPeers(ctx, peerRelayChan)
+	go s.listenPeers(ctx, s.peerRelayChan)
 
 	// Outgoing connections to peers
 	for _, peerAddr := range s.cfg.Peers {
-		go s.connectToPeer(ctx, peerAddr, peerRelayChan)
+		go s.connectToPeer(ctx, peerAddr, s.peerRelayChan)
 	}
 
 	// Main relay loop
@@ -101,12 +102,12 @@ func (s *Server) Start(ctx context.Context) error {
 				s.broadcastToPeers(data)
 				atomic.AddUint64(&s.totalForwarded, 1)
 
-			case data := <-peerRelayChan:
+			case data := <-s.peerRelayChan:
 				if s.dedup.IsDuplicate(data) {
 					continue
 				}
 				if err := s.capturer.Inject(data); err != nil {
-					log.Printf("Failed to inject packet: %v", err)
+					logger.Error("Failed to inject packet: %v", err)
 					atomic.AddUint64(&s.totalErrors, 1)
 				}
 			}
@@ -125,7 +126,7 @@ func (s *Server) listenPeers(ctx context.Context, relayChan chan<- []byte) {
 	} else {
 		cert, err2 := tls.LoadX509KeyPair(s.cfg.TLSCertPath, s.cfg.TLSKeyPath)
 		if err2 != nil {
-			log.Printf("Failed to load TLS keys: %v", err2)
+			logger.Error("Failed to load TLS keys: %v", err2)
 			return
 		}
 		tlsCfg := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
@@ -133,14 +134,20 @@ func (s *Server) listenPeers(ctx context.Context, relayChan chan<- []byte) {
 	}
 
 	if err != nil {
-		log.Printf("Failed to listen: %v", err)
+		logger.Error("Failed to listen: %v", err)
 		return
 	}
-	defer listener.Close()
+	defer func() {
+		if err := listener.Close(); err != nil && err != net.ErrClosed {
+			logger.Error("Error closing listener: %v", err)
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()
-		listener.Close()
+		if err := listener.Close(); err != nil && err != net.ErrClosed {
+			logger.Error("Error closing listener on context done: %v", err)
+		}
 	}()
 
 	for {
@@ -150,7 +157,7 @@ func (s *Server) listenPeers(ctx context.Context, relayChan chan<- []byte) {
 			case <-ctx.Done():
 				return
 			default:
-				log.Printf("Accept error: %v", err)
+				logger.Error("Accept error: %v", err)
 				continue
 			}
 		}
@@ -175,7 +182,7 @@ func (s *Server) connectToPeer(ctx context.Context, addr string, relayChan chan<
 			}
 
 			if err != nil {
-				log.Printf("Failed to connect to peer %s: %v, retrying...", addr, err)
+				logger.Error("Failed to connect to peer %s: %v, retrying...", addr, err)
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -195,16 +202,20 @@ func (s *Server) handleNewConn(ctx context.Context, conn net.Conn, relayChan cha
 	for _, b := range s.cfg.BannedIDs {
 		if b == peerID {
 			s.peersMu.RUnlock()
-			log.Printf("Rejecting banned peer ID: %s", peerID)
-			conn.Close()
+			logger.Info("Rejecting banned peer ID: %s", peerID)
+			if err := conn.Close(); err != nil {
+				logger.Error("Error closing banned peer ID connection: %v", err)
+			}
 			return
 		}
 	}
 	for _, b := range s.cfg.BannedHosts {
 		if b == ip {
 			s.peersMu.RUnlock()
-			log.Printf("Rejecting banned peer Host/IP: %s", ip)
-			conn.Close()
+			logger.Info("Rejecting banned peer Host/IP: %s", ip)
+			if err := conn.Close(); err != nil {
+				logger.Error("Error closing banned peer Host/IP connection: %v", err)
+			}
 			return
 		}
 	}
@@ -221,12 +232,14 @@ func (s *Server) handleNewConn(ctx context.Context, conn net.Conn, relayChan cha
 	s.peersMu.RUnlock()
 
 	if localChildren >= s.cfg.MaxChildren {
-		log.Printf("Rejecting peer %s: max child connections reached (%d)", peerID, s.cfg.MaxChildren)
-		conn.Close()
+		logger.Info("Rejecting peer %s: max child connections reached (%d)", peerID, s.cfg.MaxChildren)
+		if err := conn.Close(); err != nil {
+			logger.Error("Error closing peer %s connection (max children): %v", peerID, err)
+		}
 		return
 	}
 
-	p := peer.NewPeer(peerID, conn)
+	p := peer.NewPeer(peerID, conn, s.cfg.NetworkKey)
 
 	s.peersMu.Lock()
 	s.peers[peerID] = p
@@ -273,11 +286,14 @@ func (s *Server) CollectStats() stats.Stats {
 		Uptime:         time.Since(s.startTime),
 		UptimeStr:      stats.FormatDuration(time.Since(s.startTime)),
 		Peers:          peerStats,
+		Logs:           logger.GetLogs(),
 		CaptureError:   captureErr,
 		SortField:      s.cfg.SortField,
 		SortReverse:    s.cfg.SortReverse,
 		ListenAddr:     s.cfg.ListenAddr,
 		MaxChildren:    s.cfg.MaxChildren,
+		NetworkKey:     s.cfg.NetworkKey,
+		DemoProps:      nil,
 	}
 
 	if s.demoMode {
@@ -302,12 +318,15 @@ func (s *Server) SetSortField(field string) {
 	s.persistConfig()
 }
 
-func (s *Server) UpdateConfig(adminPass string, maxChildren int) {
+func (s *Server) UpdateConfig(adminPass string, maxChildren int, networkKey string) {
 	if adminPass != "" {
 		s.cfg.AdminPass = adminPass
 	}
 	if maxChildren > 0 {
 		s.cfg.MaxChildren = maxChildren
+	}
+	if networkKey != "" {
+		s.cfg.NetworkKey = networkKey
 	}
 	s.persistConfig()
 }
@@ -315,7 +334,7 @@ func (s *Server) UpdateConfig(adminPass string, maxChildren int) {
 func (s *Server) persistConfig() {
 	if s.configPath != "" {
 		if err := config.SaveConfig(s.configPath, s.cfg); err != nil {
-			log.Printf("Failed to save config: %v", err)
+			logger.Error("Failed to save config: %v", err)
 		}
 	}
 }
@@ -330,7 +349,9 @@ func (s *Server) UpdateDemoProps(packetRate, dropRate, errorRate, numPeers int) 
 func (s *Server) BanPeer(id string, ip string) {
 	s.peersMu.Lock()
 	if p, ok := s.peers[id]; ok {
-		p.Conn.Close()
+		if err := p.Conn.Close(); err != nil {
+			logger.Error("Error closing peer %s connection on ban: %v", id, err)
+		}
 	}
 	s.peersMu.Unlock()
 
@@ -366,9 +387,47 @@ func (s *Server) BanPeer(id string, ip string) {
 func (s *Server) DisconnectPeer(id string) {
 	s.peersMu.Lock()
 	if p, ok := s.peers[id]; ok {
-		p.Conn.Close()
+		if err := p.Conn.Close(); err != nil {
+			logger.Error("Error closing peer %s connection on disconnect: %v", id, err)
+		}
 	}
 	s.peersMu.Unlock()
+}
+
+func (s *Server) AddPeer(ctx context.Context, addr string) {
+	// If port is missing, add default port
+	if !strings.Contains(addr, "]") { // Not an IPv6 literal with port or without
+		if !strings.Contains(addr, ":") {
+			addr = net.JoinHostPort(addr, "8787")
+		}
+	} else {
+		// IPv6 literal like [2001:db8::1]
+		if !strings.HasSuffix(addr, ":") && !strings.Contains(addr[strings.LastIndex(addr, "]"):], ":") {
+			addr = net.JoinHostPort(addr, "8787")
+		}
+	}
+
+	// Check if already in peers list
+	s.peersMu.RLock()
+	for _, p := range s.cfg.Peers {
+		if p == addr {
+			s.peersMu.RUnlock()
+			logger.Info("Peer %s already in configuration", addr)
+			return
+		}
+	}
+	s.peersMu.RUnlock()
+
+	s.peersMu.Lock()
+	s.cfg.Peers = append(s.cfg.Peers, addr)
+	s.peersMu.Unlock()
+
+	s.persistConfig()
+
+	if !s.demoMode {
+		go s.connectToPeer(ctx, addr, s.peerRelayChan)
+	}
+	logger.Info("Manually added peer: %s", addr)
 }
 
 func (s *Server) runDemo(ctx context.Context) {
@@ -427,7 +486,7 @@ func (s *Server) runDemo(ctx context.Context) {
 					}
 
 					if _, exists := s.peers[id]; !exists {
-						p := peer.NewPeer(id, &fakeConn{remoteAddr: &net.TCPAddr{IP: net.ParseIP(ip), Port: 8787}})
+						p := peer.NewPeer(id, &fakeConn{remoteAddr: &net.TCPAddr{IP: net.ParseIP(ip), Port: 8787}}, s.cfg.NetworkKey)
 						p.UpdateDemoStatsWithParent(int64(i), parentID, 0, s.cfg.MaxChildren)
 						s.peers[id] = p
 					}

@@ -28,6 +28,7 @@ type Config struct {
 	AdminUser      string   `json:"admin_user"`
 	AdminPass      string   `json:"admin_pass"`
 	MaxChildren    int      `json:"max_children"`
+	NetworkKey     string   `json:"network_key"`
 }
 
 func DefaultConfig() *Config {
@@ -48,6 +49,7 @@ func DefaultConfig() *Config {
 		AdminUser:      "admin",
 		AdminPass:      "admin",
 		MaxChildren:    5,
+		NetworkKey:     "",
 	}
 }
 

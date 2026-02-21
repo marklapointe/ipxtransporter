@@ -39,9 +39,12 @@
 - [x] Truly random publicly routable IPv4/IPv6 addresses in demo mode
 - [x] Automatic configuration persistence for all settings changed via UI or API
 - [x] Examples directory with sample configuration and make install target
+- [x] Improved error handling for connection closures and GeoIP lookups
 - [x] Human-friendly Web UI fields (Connected at/Last seen) and split Children column
-- [x] Fixed Web UI demo settings reset issue during user editing
+- [x] Unified log handling with persistent display in TUI and Web UI
+- [x] Network key authentication (permissive if key is missing)
 - [x] Proper README.md and documentation cleanup
+- [x] Manual peer addition in TUI and Web UI (Persisted)
 - [x] Unit tests (TDD) - *Partially implemented*
 - [x] Integration tests
 

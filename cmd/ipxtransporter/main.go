@@ -6,7 +6,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,7 +29,7 @@ func main() {
 
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
-		log.Printf("Warning: failed to load config from %s: %v. Using defaults.", *configPath, err)
+		logger.Error("Warning: failed to load config from %s: %v. Using defaults.", *configPath, err)
 	}
 
 	// Override config with flags if provided
@@ -45,7 +45,7 @@ func main() {
 
 	srv, err := relay.NewServer(cfg, *configPath)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+		logger.Fatal("Failed to create server: %v", err)
 	}
 
 	if *demoMode {
@@ -64,25 +64,25 @@ func main() {
 	}()
 
 	if err := srv.Start(ctx); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Fatal("Failed to start server: %v", err)
 	}
 
 	if cfg.EnableHTTP {
 		apiSrv := api.NewAPI(srv, cfg)
 		go func() {
 			if err := apiSrv.ListenAndServe(cfg.HTTPListenAddr); err != nil {
-				log.Printf("HTTP API error: %v", err)
+				logger.Error("HTTP API error: %v", err)
 			}
 		}()
 	}
 
 	if *tuiMode {
-		tuiApp := tui.NewTUIWithDemo(srv.CollectStats, cfg, *configPath, srv.UpdateDemoProps, srv.DisconnectPeer, srv.BanPeer)
+		tuiApp := tui.NewTUIWithDemo(srv.CollectStats, cfg, *configPath, srv.UpdateDemoProps, srv.DisconnectPeer, srv.BanPeer, srv.AddPeer)
 		if err := tuiApp.Run(ctx); err != nil {
-			log.Fatalf("TUI error: %v", err)
+			logger.Fatal("TUI error: %v", err)
 		}
 	} else {
-		log.Println("Running in daemon mode. Press Ctrl+C to exit.")
+		logger.Info("Running in daemon mode. Press Ctrl+C to exit.")
 		<-ctx.Done()
 	}
 }

@@ -28,6 +28,11 @@
         .btn-danger { background: #e74c3c; }
         .btn:hover { opacity: 0.8; }
         .demo-controls { margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fffde7; }
+        #log-area { margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #2c3e50; color: #ecf0f1; height: 200px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; }
+        .log-info { color: #2ecc71; }
+        .log-error { color: #e74c3c; }
+        .log-fatal { color: #e74c3c; font-weight: bold; text-transform: uppercase; }
+        .log-timestamp { color: #95a5a6; margin-right: 8px; }
     </style>
 </head>
 <body>
@@ -62,9 +67,17 @@
     <div id="admin-config-area" class="demo-controls" style="display: none;">
         <h3>Admin Settings</h3>
         <label>Admin Password: <input type="password" id="new-admin-pass" placeholder="New Password" style="width: 150px;"></label>
+        <label style="margin-left: 10px;">Network Key: <input type="text" id="admin-network-key" placeholder="Network Key" style="width: 150px;"></label>
         <label style="margin-left: 10px;">Max Children: <input type="number" id="admin-max-children" style="width: 50px;"></label>
         <button id="apply-config" class="btn" style="margin-left: 10px;">Update Settings</button>
+        <hr>
+        <h3>Manual Peer Addition</h3>
+        <label>Peer Address: <input type="text" id="manual-peer-addr" placeholder="e.g. 1.2.3.4:8787" style="width: 200px;"></label>
+        <button id="add-peer-btn" class="btn" style="margin-left: 10px;">Add Peer</button>
     </div>
+
+    <h2>System Logs</h2>
+    <div id="log-area"></div>
 
     <h2>Connected Peers (<span id="peer-count">{{ len .Peers }}</span>)</h2>
     <table>
@@ -168,7 +181,9 @@
                 }
 
                 updateInputIfNoFocus('admin-max-children', data.max_children || 5);
+                updateInputIfNoFocus('admin-network-key', data.network_key || '');
 
+                updateLogs(data.logs);
                 updateTable(data.peers);
                 updateGraph(data.peers);
             } catch (e) {
@@ -181,6 +196,25 @@
             if (network) network.setSize('100%', '100%');
         });
         resizeObserver.observe(document.getElementById('network-graph'));
+
+        function updateLogs(logs) {
+            const logArea = document.getElementById('log-area');
+            if (!logs) return;
+            const isAtBottom = logArea.scrollHeight - logArea.scrollTop <= logArea.clientHeight + 1;
+            
+            logArea.innerHTML = '';
+            logs.forEach(l => {
+                const div = document.createElement('div');
+                const ts = new Date(l.timestamp).toLocaleTimeString();
+                const levelClass = 'log-' + l.level.toLowerCase();
+                div.innerHTML = `<span class="log-timestamp">[${ts}]</span><span class="${levelClass}">${l.level}: ${l.message}</span>`;
+                logArea.appendChild(div);
+            });
+
+            if (isAtBottom) {
+                logArea.scrollTop = logArea.scrollHeight;
+            }
+        }
 
         function updateTable(peers) {
             const tbody = document.getElementById('peer-table-body');
@@ -305,9 +339,20 @@
                 document.querySelector('.admin-only-header').style.display = 'table-cell';
                 loadStats();
             } else {
-                alert("Login failed");
+                showToast("Login failed", "error");
             }
         };
+
+        function showToast(message, type) {
+            // Simple toast instead of alert
+            const logArea = document.getElementById('log-area');
+            const div = document.createElement('div');
+            const ts = new Date().toLocaleTimeString();
+            const levelClass = type === 'error' ? 'log-error' : 'log-info';
+            div.innerHTML = `<span class="log-timestamp">[${ts}]</span><span class="${levelClass}">${type.toUpperCase()}: ${message}</span>`;
+            logArea.appendChild(div);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
 
         document.getElementById('apply-demo').onclick = async () => {
             const props = {
@@ -326,9 +371,11 @@
 
         document.getElementById('apply-config').onclick = async () => {
             const pass = document.getElementById('new-admin-pass').value;
+            const networkKey = document.getElementById('admin-network-key').value;
             const maxChildren = parseInt(document.getElementById('admin-max-children').value);
             const body = {};
             if (pass) body.admin_pass = pass;
+            if (networkKey !== undefined) body.network_key = networkKey;
             if (!isNaN(maxChildren)) body.max_children = maxChildren;
             
             if (Object.keys(body).length === 0) return;
@@ -341,8 +388,28 @@
             const res = await resp.json();
             if (res.success) {
                 document.getElementById('new-admin-pass').value = '';
+                showToast("Settings updated successfully", "info");
             } else {
-                alert("Failed to update settings");
+                showToast("Failed to update settings", "error");
+            }
+        };
+
+        document.getElementById('add-peer-btn').onclick = async () => {
+            const addr = document.getElementById('manual-peer-addr').value;
+            if (!addr) return;
+            
+            const resp = await fetch('/api/peers/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ addr })
+            });
+            const res = await resp.json();
+            if (res.success) {
+                document.getElementById('manual-peer-addr').value = '';
+                showToast("Peer added successfully", "info");
+                loadStats();
+            } else {
+                showToast("Failed to add peer", "error");
             }
         };
 

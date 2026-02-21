@@ -7,8 +7,8 @@ package api
 import (
 	"embed"
 	"encoding/json"
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"html/template"
-	"log"
 	"net/http"
 	"strings"
 
@@ -32,7 +32,7 @@ type API struct {
 func NewAPI(srv *relay.Server, cfg *config.Config) *API {
 	tmpl, err := template.ParseFS(templatesFS, "templates/stats.tmpl")
 	if err != nil {
-		log.Printf("Warning: failed to parse templates/stats.tmpl: %v", err)
+		logger.Error("Warning: failed to parse templates/stats.tmpl: %v", err)
 	}
 
 	return &API{
@@ -59,8 +59,9 @@ func (a *API) ListenAndServe(addr string) error {
 	mux.HandleFunc("/api/demo", a.demoHandler)
 	mux.HandleFunc("/api/login", a.loginHandler)
 	mux.HandleFunc("/api/config", a.configHandler)
+	mux.HandleFunc("/api/peers/add", a.addPeerHandler)
 
-	log.Printf("HTTP API listening on %s", addr)
+	logger.Info("HTTP API listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
@@ -74,7 +75,7 @@ func (a *API) statsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html")
 		if err := a.tmpl.Execute(w, s); err != nil {
-			log.Printf("Template execute error: %v", err)
+			logger.Error("Template execute error: %v", err)
 		}
 	} else {
 		w.Header().Set("Content-Type", "application/json")
@@ -149,14 +150,33 @@ func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AdminPass   string `json:"admin_pass"`
 		MaxChildren int    `json:"max_children"`
+		NetworkKey  string `json:"network_key"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	if req.AdminPass != "" || req.MaxChildren > 0 {
-		a.srv.UpdateConfig(req.AdminPass, req.MaxChildren)
+	if req.AdminPass != "" || req.MaxChildren > 0 || req.NetworkKey != "" {
+		a.srv.UpdateConfig(req.AdminPass, req.MaxChildren, req.NetworkKey)
 	}
+	json.NewEncoder(w).Encode(map[string]any{"success": true})
+}
+
+func (a *API) addPeerHandler(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Addr string `json:"addr"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Addr == "" {
+		http.Error(w, "Address is required", http.StatusBadRequest)
+		return
+	}
+
+	a.srv.AddPeer(r.Context(), req.Addr)
 	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }

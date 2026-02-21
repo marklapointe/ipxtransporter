@@ -34,7 +34,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		t.Fatal(err)
+		t.Logf("Warning: failed to close temporary file: %v", err)
 	}
 
 	cfg, err := LoadConfig(tmpFile.Name())

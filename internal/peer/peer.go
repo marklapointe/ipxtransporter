@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"github.com/mlapointe/ipxtransporter/internal/stats"
 )
 
@@ -42,22 +42,86 @@ type Peer struct {
 	numChildren int
 	maxChildren int
 	whois       string
+	networkKey  string
 	mu          sync.RWMutex
 }
 
-func NewPeer(id string, conn net.Conn) *Peer {
+func NewPeer(id string, conn net.Conn, networkKey string) *Peer {
 	return &Peer{
 		ID:          id,
 		Conn:        conn,
 		ConnectedAt: time.Now(),
 		SendChan:    make(chan []byte, 1000),
 		lastSeen:    time.Now(),
+		networkKey:  networkKey,
 	}
 }
 
 func (p *Peer) Run(ctx context.Context, relayChan chan<- []byte, onDisconnect func(string)) {
-	defer p.Conn.Close()
+	defer func() {
+		if err := p.Conn.Close(); err != nil && err != net.ErrClosed {
+			logger.Error("Error closing peer %s connection: %v", p.ID, err)
+		}
+	}()
 	defer onDisconnect(p.ID)
+
+	// Authentication Handshake
+	if p.networkKey != "" {
+		// Send our network key
+		keyLen := uint32(len(p.networkKey))
+		if err := binary.Write(p.Conn, binary.BigEndian, keyLen); err != nil {
+			logger.Error("Peer %s: failed to send key length: %v", p.ID, err)
+			return
+		}
+		if _, err := p.Conn.Write([]byte(p.networkKey)); err != nil {
+			logger.Error("Peer %s: failed to send network key: %v", p.ID, err)
+			return
+		}
+
+		// Receive their network key
+		var remoteKeyLen uint32
+		if err := binary.Read(p.Conn, binary.BigEndian, &remoteKeyLen); err != nil {
+			logger.Error("Peer %s: failed to read remote key length: %v", p.ID, err)
+			return
+		}
+		if remoteKeyLen > 256 {
+			logger.Error("Peer %s: remote network key too long (%d)", p.ID, remoteKeyLen)
+			return
+		}
+		remoteKey := make([]byte, remoteKeyLen)
+		if _, err := io.ReadFull(p.Conn, remoteKey); err != nil {
+			logger.Error("Peer %s: failed to read remote network key: %v", p.ID, err)
+			return
+		}
+
+		if string(remoteKey) != p.networkKey {
+			logger.Error("Peer %s: network key mismatch!", p.ID)
+			return
+		}
+		logger.Info("Peer %s: authenticated successfully", p.ID)
+	} else {
+		// Even if no key is required locally, we must check if the remote expects one
+		// Wait for a short time to see if they send a key length
+		p.Conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+		var remoteKeyLen uint32
+		err := binary.Read(p.Conn, binary.BigEndian, &remoteKeyLen)
+		p.Conn.SetReadDeadline(time.Time{}) // Clear deadline
+
+		if err == nil {
+			// They sent a key, but we don't have one.
+			// Just read it and proceed if we want to be permissive as requested
+			// "If there is no network key present, allow anyone to connect"
+			if remoteKeyLen <= 256 {
+				remoteKey := make([]byte, remoteKeyLen)
+				io.ReadFull(p.Conn, remoteKey)
+			}
+			// Send empty key back if they are waiting for one?
+			// Actually, if we are permissive, we should just continue.
+			// But the remote might be expecting a key.
+			// Let's send an empty key back to satisfy the handshake if they sent one.
+			binary.Write(p.Conn, binary.BigEndian, uint32(0))
+		}
+	}
 
 	// Fetch GeoIP and Whois in background
 	go p.lookupInfo()
@@ -74,21 +138,21 @@ func (p *Peer) Run(ctx context.Context, relayChan chan<- []byte, onDisconnect fu
 			err := binary.Read(p.Conn, binary.BigEndian, &length)
 			if err != nil {
 				if err != io.EOF {
-					log.Printf("Peer %s recv error: %v", p.ID, err)
+					logger.Error("Peer %s recv error: %v", p.ID, err)
 					atomic.AddUint64(&p.errors, 1)
 				}
 				return
 			}
 
 			if length > 2000 { // Max IPX packet is around 576-1500
-				log.Printf("Peer %s sent too large packet: %d", p.ID, length)
+				logger.Error("Peer %s sent too large packet: %d", p.ID, length)
 				return
 			}
 
 			data := make([]byte, length)
 			_, err = io.ReadFull(p.Conn, data)
 			if err != nil {
-				log.Printf("Peer %s recv data error: %v", p.ID, err)
+				logger.Error("Peer %s recv data error: %v", p.ID, err)
 				return
 			}
 
@@ -121,14 +185,14 @@ func (p *Peer) Run(ctx context.Context, relayChan chan<- []byte, onDisconnect fu
 				// Write length header
 				err := binary.Write(p.Conn, binary.BigEndian, uint32(len(data)))
 				if err != nil {
-					log.Printf("Peer %s send error: %v", p.ID, err)
+					logger.Error("Peer %s send error: %v", p.ID, err)
 					return
 				}
 
 				// Write packet data
 				_, err = p.Conn.Write(data)
 				if err != nil {
-					log.Printf("Peer %s send data error: %v", p.ID, err)
+					logger.Error("Peer %s send data error: %v", p.ID, err)
 					return
 				}
 
@@ -220,10 +284,14 @@ func (p *Peer) lookupInfo() {
 	// Use ip-api.com for GeoIP (free for non-commercial, no API key needed)
 	resp, err := http.Get(fmt.Sprintf("http://ip-api.com/json/%s", ip))
 	if err != nil {
-		log.Printf("GeoIP lookup failed: %v", err)
+		logger.Error("GeoIP lookup failed: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Error("Error closing GeoIP response body: %v", err)
+		}
+	}()
 
 	var result struct {
 		Status  string  `json:"status"`
@@ -236,7 +304,7 @@ func (p *Peer) lookupInfo() {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("Failed to decode GeoIP response: %v", err)
+		logger.Error("Failed to decode GeoIP response: %v", err)
 		return
 	}
 
