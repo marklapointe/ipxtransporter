@@ -453,6 +453,10 @@ func (t *TUI) showConfigEditor() {
 		AddInputField("Max Children", fmt.Sprintf("%d", t.cfg.MaxChildren), 5, tview.InputFieldInteger, func(text string) {
 			fmt.Sscanf(text, "%d", &t.cfg.MaxChildren)
 		}).
+		AddCheckbox("Rebalancing", t.cfg.RebalanceEnabled, func(checked bool) { t.cfg.RebalanceEnabled = checked }).
+		AddInputField("Rebalance Int", fmt.Sprintf("%d", t.cfg.RebalanceInterval), 5, tview.InputFieldInteger, func(text string) {
+			fmt.Sscanf(text, "%d", &t.cfg.RebalanceInterval)
+		}).
 		AddButton("Save", func() {
 			t.showSaveDialog()
 		}).
@@ -614,8 +618,8 @@ func (t *TUI) showWhois() {
 		childConsumption = float64(p.NumChildren) / float64(p.MaxChildren) * 100
 	}
 
-	whoisText := fmt.Sprintf("ID: %s\nIP: %s\nLocation: %s, %s\nLat/Lon: %.2f, %.2f\n\nConnections: %d/%d (%.1f%%)\n\n%s",
-		p.ID, p.IP, p.City, p.Country, p.Lat, p.Lon, p.NumChildren, p.MaxChildren, childConsumption, p.Whois)
+	whoisText := fmt.Sprintf("ID: %s\nIP: %s\nHostname: %s\nLocation: %s, %s\nLat/Lon: %.2f, %.2f\n\nLatency: %.1f ms\nConnections: %d/%d (%.1f%%)\n\n%s",
+		p.ID, p.IP, p.Hostname, p.City, p.Country, p.Lat, p.Lon, p.LatencyMs, p.NumChildren, p.MaxChildren, childConsumption, p.Whois)
 
 	modal := tview.NewModal().
 		SetText(whoisText).

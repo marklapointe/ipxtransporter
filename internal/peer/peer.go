@@ -43,6 +43,7 @@ type Peer struct {
 	maxChildren int
 	whois       string
 	networkKey  string
+	latencyMs   float64
 	mu          sync.RWMutex
 }
 
@@ -233,6 +234,7 @@ func (p *Peer) GetStats() stats.PeerStat {
 		Lat:         p.lat,
 		Lon:         p.lon,
 		Whois:       p.whois,
+		LatencyMs:   p.latencyMs,
 	}
 }
 
@@ -240,12 +242,13 @@ func (p *Peer) UpdateDemoStats() {
 	p.UpdateDemoStatsWithSeed(time.Now().Unix())
 }
 
-func (p *Peer) UpdateDemoStatsWithParent(seed int64, parentID string, numChildren, maxChildren int) {
+func (p *Peer) UpdateDemoStatsWithParent(seed int64, parentID string, numChildren, maxChildren int, latency float64) {
 	p.UpdateDemoStatsWithSeed(seed)
 	p.mu.Lock()
 	p.parentID = parentID
 	p.numChildren = numChildren
 	p.maxChildren = maxChildren
+	p.latencyMs = latency
 	p.mu.Unlock()
 }
 
@@ -263,6 +266,9 @@ func (p *Peer) UpdateDemoStatsWithSeed(seed int64) {
 	atomic.AddUint64(&p.recvPkts, uint64(1+seed%5))
 	p.mu.Lock()
 	p.lastSeen = time.Now()
+	if p.latencyMs == 0 {
+		p.latencyMs = float64(seed % 100)
+	}
 	if p.country == "" {
 		p.country = "" // Will be populated by lookupInfo
 		p.city = ""

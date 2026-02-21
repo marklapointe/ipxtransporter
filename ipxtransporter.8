@@ -53,6 +53,50 @@ Zoom in/out on the traffic graph.
 .TP
 .B Ctrl+C
 Graceful exit.
+.SH CONFIGURATION
+The configuration is a JSON file containing the following fields:
+.TP
+.BI interface " (string)"
+Network interface to capture from.
+.TP
+.BI listen_addr " (string)"
+TLS listen address (e.g., ":8787").
+.TP
+.BI peers " (array of strings)"
+Initial list of peers to connect to.
+.TP
+.BI tls_cert_path " (string)"
+Path to the TLS certificate file.
+.TP
+.BI tls_key_path " (string)"
+Path to the TLS private key file.
+.TP
+.BI disable_ssl " (boolean)"
+Disable TLS (debug only).
+.TP
+.BI enable_http " (boolean)"
+Enable the HTTP statistics API.
+.TP
+.BI http_listen_addr " (string)"
+HTTP API listen address (e.g., ":8080").
+.TP
+.BI admin_user " (string)"
+Username for the Web UI admin section.
+.TP
+.BI admin_pass " (string)"
+Password for the Web UI admin section.
+.TP
+.BI max_children " (integer)"
+Maximum number of child connections allowed for this node.
+.TP
+.BI network_key " (string)"
+Secret key required for peer authentication. If empty, any peer can connect.
+.TP
+.BI rebalance_enabled " (boolean)"
+Enable performance-based network rebalancing.
+.TP
+.BI rebalance_interval " (integer)"
+Interval in seconds for performance evaluation and rebalancing.
 .SH FILES
 .TP
 .I /etc/ipxtransporter.json

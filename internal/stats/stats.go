@@ -14,21 +14,23 @@ import (
 
 // Stats holds all metrics that the web API and TUI expose.
 type Stats struct {
-	TotalReceived  uint64              `json:"total_received"`
-	TotalForwarded uint64              `json:"total_forwarded"`
-	TotalDropped   uint64              `json:"total_dropped"`
-	TotalErrors    uint64              `json:"total_errors"`
-	Uptime         time.Duration       `json:"uptime"`
-	UptimeStr      string              `json:"uptime_str"`
-	Peers          []PeerStat          `json:"peers"`
-	Logs           []logger.LogMessage `json:"logs"`
-	CaptureError   string              `json:"capture_error"`
-	SortField      string              `json:"sort_field"`
-	SortReverse    bool                `json:"sort_reverse"`
-	ListenAddr     string              `json:"listen_addr"`
-	MaxChildren    int                 `json:"max_children"`
-	NetworkKey     string              `json:"network_key"`
-	DemoProps      *DemoProps          `json:"demo_props,omitzero"`
+	TotalReceived     uint64              `json:"total_received"`
+	TotalForwarded    uint64              `json:"total_forwarded"`
+	TotalDropped      uint64              `json:"total_dropped"`
+	TotalErrors       uint64              `json:"total_errors"`
+	Uptime            time.Duration       `json:"uptime"`
+	UptimeStr         string              `json:"uptime_str"`
+	Peers             []PeerStat          `json:"peers"`
+	Logs              []logger.LogMessage `json:"logs"`
+	CaptureError      string              `json:"capture_error"`
+	SortField         string              `json:"sort_field"`
+	SortReverse       bool                `json:"sort_reverse"`
+	ListenAddr        string              `json:"listen_addr"`
+	MaxChildren       int                 `json:"max_children"`
+	NetworkKey        string              `json:"network_key"`
+	RebalanceEnabled  bool                `json:"rebalance_enabled"`
+	RebalanceInterval int                 `json:"rebalance_interval"`
+	DemoProps         *DemoProps          `json:"demo_props,omitzero"`
 }
 
 type DemoProps struct {
@@ -118,4 +120,5 @@ type PeerStat struct {
 	Lat         float64   `json:"lat"`
 	Lon         float64   `json:"lon"`
 	Whois       string    `json:"whois"`
+	LatencyMs   float64   `json:"latency_ms"`
 }

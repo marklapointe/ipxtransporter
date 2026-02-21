@@ -148,18 +148,18 @@ func (a *API) demoHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AdminPass   string `json:"admin_pass"`
-		MaxChildren int    `json:"max_children"`
-		NetworkKey  string `json:"network_key"`
+		AdminPass         string `json:"admin_pass"`
+		MaxChildren       int    `json:"max_children"`
+		NetworkKey        string `json:"network_key"`
+		RebalanceEnabled  bool   `json:"rebalance_enabled"`
+		RebalanceInterval int    `json:"rebalance_interval"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	if req.AdminPass != "" || req.MaxChildren > 0 || req.NetworkKey != "" {
-		a.srv.UpdateConfig(req.AdminPass, req.MaxChildren, req.NetworkKey)
-	}
+	a.srv.UpdateConfig(req.AdminPass, req.MaxChildren, req.NetworkKey, req.RebalanceEnabled, req.RebalanceInterval)
 	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }
 

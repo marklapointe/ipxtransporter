@@ -69,6 +69,8 @@
         <label>Admin Password: <input type="password" id="new-admin-pass" placeholder="New Password" style="width: 150px;"></label>
         <label style="margin-left: 10px;">Network Key: <input type="text" id="admin-network-key" placeholder="Network Key" style="width: 150px;"></label>
         <label style="margin-left: 10px;">Max Children: <input type="number" id="admin-max-children" style="width: 50px;"></label>
+        <label style="margin-left: 10px;">Rebalancing: <input type="checkbox" id="admin-rebalance-enabled"></label>
+        <label style="margin-left: 10px;">Interval (s): <input type="number" id="admin-rebalance-interval" style="width: 50px;"></label>
         <button id="apply-config" class="btn" style="margin-left: 10px;">Update Settings</button>
         <hr>
         <h3>Manual Peer Addition</h3>
@@ -86,6 +88,7 @@
                 <th onclick="setSort('id')">ID</th>
                 <th onclick="setSort('ip')">IP</th>
                 <th onclick="setSort('hostname')">Hostname</th>
+                <th>Latency</th>
                 <th onclick="setSort('connected')">Connected At</th>
                 <th onclick="setSort('last_seen')">Last Seen</th>
                 <th onclick="setSort('children')">Children</th>
@@ -182,6 +185,8 @@
 
                 updateInputIfNoFocus('admin-max-children', data.max_children || 5);
                 updateInputIfNoFocus('admin-network-key', data.network_key || '');
+                updateInputIfNoFocus('admin-rebalance-interval', data.rebalance_interval || 30);
+                document.getElementById('admin-rebalance-enabled').checked = data.rebalance_enabled;
 
                 updateLogs(data.logs);
                 updateTable(data.peers);
@@ -233,6 +238,7 @@
 		<td>${p.id}</td>
 		<td>${p.ip}</td>
 		<td>${p.hostname}</td>
+		<td>${p.latency_ms.toFixed(1)} ms</td>
 		<td>${formatTime(p.connected_at)}</td>
 		<td>${formatTimeAgo(p.last_seen)}</td>
 		<td>${p.num_children}/${p.max_children} (${consumption}%)</td>
@@ -373,12 +379,16 @@
             const pass = document.getElementById('new-admin-pass').value;
             const networkKey = document.getElementById('admin-network-key').value;
             const maxChildren = parseInt(document.getElementById('admin-max-children').value);
-            const body = {};
+            const rebalanceEnabled = document.getElementById('admin-rebalance-enabled').checked;
+            const rebalanceInterval = parseInt(document.getElementById('admin-rebalance-interval').value);
+            
+            const body = {
+                rebalance_enabled: rebalanceEnabled,
+                rebalance_interval: rebalanceInterval
+            };
             if (pass) body.admin_pass = pass;
             if (networkKey !== undefined) body.network_key = networkKey;
             if (!isNaN(maxChildren)) body.max_children = maxChildren;
-            
-            if (Object.keys(body).length === 0) return;
             
             const resp = await fetch('/api/config', {
                 method: 'POST',

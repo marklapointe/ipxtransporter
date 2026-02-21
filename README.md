@@ -91,7 +91,9 @@ A sample configuration file (`/etc/ipxtransporter.json`):
   "admin_user": "admin",
   "admin_pass": "admin",
   "max_children": 5,
-  "network_key": "secret-key"
+  "network_key": "secret-key",
+  "rebalance_enabled": true,
+  "rebalance_interval": 30
 }
 ```
 

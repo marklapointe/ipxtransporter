@@ -19,6 +19,7 @@ import (
 	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"github.com/mlapointe/ipxtransporter/internal/peer"
 	"github.com/mlapointe/ipxtransporter/internal/stats"
+	"sort"
 )
 
 type Server struct {
@@ -42,6 +43,7 @@ type Server struct {
 	demoNumPeers   int
 	demoPeersMu    sync.RWMutex
 	peerRelayChan  chan []byte
+	rebalanceTimer *time.Ticker
 }
 
 func NewServer(cfg *config.Config, configPath string) (*Server, error) {
@@ -62,6 +64,7 @@ func NewServer(cfg *config.Config, configPath string) (*Server, error) {
 		demoErrorRate:  10,
 		demoNumPeers:   5,
 		peerRelayChan:  make(chan []byte, 1000),
+		rebalanceTimer: time.NewTicker(time.Duration(cfg.RebalanceInterval) * time.Second),
 	}, nil
 }
 
@@ -93,6 +96,10 @@ func (s *Server) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return
+			case <-s.rebalanceTimer.C:
+				if s.cfg.RebalanceEnabled {
+					s.rebalanceNetwork()
+				}
 			case data := <-packetChan:
 				atomic.AddUint64(&s.totalReceived, 1)
 				if s.dedup.IsDuplicate(data) {
@@ -279,21 +286,23 @@ func (s *Server) CollectStats() stats.Stats {
 	}
 
 	st := stats.Stats{
-		TotalReceived:  atomic.LoadUint64(&s.totalReceived),
-		TotalForwarded: atomic.LoadUint64(&s.totalForwarded),
-		TotalDropped:   atomic.LoadUint64(&s.totalDropped),
-		TotalErrors:    atomic.LoadUint64(&s.totalErrors),
-		Uptime:         time.Since(s.startTime),
-		UptimeStr:      stats.FormatDuration(time.Since(s.startTime)),
-		Peers:          peerStats,
-		Logs:           logger.GetLogs(),
-		CaptureError:   captureErr,
-		SortField:      s.cfg.SortField,
-		SortReverse:    s.cfg.SortReverse,
-		ListenAddr:     s.cfg.ListenAddr,
-		MaxChildren:    s.cfg.MaxChildren,
-		NetworkKey:     s.cfg.NetworkKey,
-		DemoProps:      nil,
+		TotalReceived:     atomic.LoadUint64(&s.totalReceived),
+		TotalForwarded:    atomic.LoadUint64(&s.totalForwarded),
+		TotalDropped:      atomic.LoadUint64(&s.totalDropped),
+		TotalErrors:       atomic.LoadUint64(&s.totalErrors),
+		Uptime:            time.Since(s.startTime),
+		UptimeStr:         stats.FormatDuration(time.Since(s.startTime)),
+		Peers:             peerStats,
+		Logs:              logger.GetLogs(),
+		CaptureError:      captureErr,
+		SortField:         s.cfg.SortField,
+		SortReverse:       s.cfg.SortReverse,
+		ListenAddr:        s.cfg.ListenAddr,
+		MaxChildren:       s.cfg.MaxChildren,
+		NetworkKey:        s.cfg.NetworkKey,
+		RebalanceEnabled:  s.cfg.RebalanceEnabled,
+		RebalanceInterval: s.cfg.RebalanceInterval,
+		DemoProps:         nil,
 	}
 
 	if s.demoMode {
@@ -309,6 +318,10 @@ func (s *Server) CollectStats() stats.Stats {
 	return st
 }
 
+func (s *Server) SetRebalanceInterval(interval time.Duration) {
+	s.rebalanceTimer.Reset(interval)
+}
+
 func (s *Server) SetDemoMode(enabled bool) {
 	s.demoMode = enabled
 }
@@ -318,7 +331,7 @@ func (s *Server) SetSortField(field string) {
 	s.persistConfig()
 }
 
-func (s *Server) UpdateConfig(adminPass string, maxChildren int, networkKey string) {
+func (s *Server) UpdateConfig(adminPass string, maxChildren int, networkKey string, rebalanceEnabled bool, rebalanceInterval int) {
 	if adminPass != "" {
 		s.cfg.AdminPass = adminPass
 	}
@@ -327,6 +340,11 @@ func (s *Server) UpdateConfig(adminPass string, maxChildren int, networkKey stri
 	}
 	if networkKey != "" {
 		s.cfg.NetworkKey = networkKey
+	}
+	s.cfg.RebalanceEnabled = rebalanceEnabled
+	if rebalanceInterval > 0 {
+		s.cfg.RebalanceInterval = rebalanceInterval
+		s.SetRebalanceInterval(time.Duration(rebalanceInterval) * time.Second)
 	}
 	s.persistConfig()
 }
@@ -487,7 +505,7 @@ func (s *Server) runDemo(ctx context.Context) {
 
 					if _, exists := s.peers[id]; !exists {
 						p := peer.NewPeer(id, &fakeConn{remoteAddr: &net.TCPAddr{IP: net.ParseIP(ip), Port: 8787}}, s.cfg.NetworkKey)
-						p.UpdateDemoStatsWithParent(int64(i), parentID, 0, s.cfg.MaxChildren)
+						p.UpdateDemoStatsWithParent(int64(i), parentID, 0, s.cfg.MaxChildren, float64(10+i%50))
 						s.peers[id] = p
 					}
 				}
@@ -549,3 +567,64 @@ type fakeConn struct {
 
 func (f *fakeConn) RemoteAddr() net.Addr { return f.remoteAddr }
 func (f *fakeConn) Close() error         { return nil }
+
+func (s *Server) rebalanceNetwork() {
+	if s.demoMode {
+		// In demo mode, we just let the runDemo hierarchical generation handle it
+		// or we could implement a demo-specific rebalance if needed.
+		return
+	}
+
+	s.peersMu.Lock()
+	defer s.peersMu.Unlock()
+
+	if len(s.peers) <= 1 {
+		return
+	}
+
+	// 1. Get all peers
+	type peerPerf struct {
+		id      string
+		latency float64
+	}
+	var perfs []peerPerf
+	for id, p := range s.peers {
+		perfs = append(perfs, peerPerf{id: id, latency: p.GetStats().LatencyMs})
+	}
+
+	// 2. Sort peers by performance (lowest latency first)
+	sort.Slice(perfs, func(i, j int) bool {
+		return perfs[i].latency < perfs[j].latency
+	})
+
+	// 3. Re-assign parents based on performance
+	// The fastest N peers connect to "Local"
+	// The next N*M peers connect to those N peers, and so on.
+	// For now, let's just make the fastest MaxChildren connect to Local,
+	// and others connect to the fastest ones.
+
+	maxChildren := s.cfg.MaxChildren
+	if maxChildren <= 0 {
+		maxChildren = 5
+	}
+
+	for i, perf := range perfs {
+		p := s.peers[perf.id]
+		if i < maxChildren {
+			p.UpdateDemoStatsWithParent(0, "Local", p.GetStats().NumChildren, p.GetStats().MaxChildren, p.GetStats().LatencyMs)
+		} else {
+			// Connect to one of the top peers
+			parentIdx := (i - maxChildren) / maxChildren
+			if parentIdx < maxChildren && parentIdx < i {
+				parentID := perfs[parentIdx].id
+				p.UpdateDemoStatsWithParent(0, parentID, p.GetStats().NumChildren, p.GetStats().MaxChildren, p.GetStats().LatencyMs)
+			} else {
+				// Fallback or deeper hierarchy
+				parentID := perfs[i%maxChildren].id
+				p.UpdateDemoStatsWithParent(0, parentID, p.GetStats().NumChildren, p.GetStats().MaxChildren, p.GetStats().LatencyMs)
+			}
+		}
+	}
+
+	logger.Info("Network rebalanced based on peer performance")
+}

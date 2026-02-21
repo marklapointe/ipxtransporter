@@ -45,6 +45,8 @@
 - [x] Network key authentication (permissive if key is missing)
 - [x] Proper README.md and documentation cleanup
 - [x] Manual peer addition in TUI and Web UI (Persisted)
+- [x] Performance-based network rebalancing (Core-to-Edge optimization) with configurable interval and toggle
+- [x] Man page updated with all latest features and configuration options
 - [x] Unit tests (TDD) - *Partially implemented*
 - [x] Integration tests
 
@@ -82,7 +84,9 @@ This project follows Test-Driven Development (TDD) principles. Core logic is cov
 
 8. **User‑friendly UI** – `github.com/rivo/tview` + `github.com/gdamore/tcell` for live graphs, peer tables, and traffic counters.
 
-9. **Scalable concurrency** – Support ≥ 100 peers with zero packet loss.
+9. **Performance‑based Rebalancing** – Periodically re‑evaluates peer latency and promotes high‑performance nodes to the core (Local Node children) to optimize relay paths.
+
+10. **Scalable concurrency** – Support ≥ 100 peers with zero packet loss.
 
 ---
 
