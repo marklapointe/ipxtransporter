@@ -7,10 +7,13 @@ package api
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/mlapointe/ipxtransporter/internal/logger"
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mlapointe/ipxtransporter/internal/config"
 	"github.com/mlapointe/ipxtransporter/internal/relay"
@@ -54,15 +57,40 @@ func (a *API) ListenAndServe(addr string) error {
 	})
 	mux.HandleFunc("/stats", a.statsHandler)
 	mux.HandleFunc("/stats.html", a.statsHandler)
-	mux.HandleFunc("/api/action", a.actionHandler)
+	mux.HandleFunc("/api/action", a.withAuth(a.actionHandler))
 	mux.HandleFunc("/api/sort", a.sortHandler)
-	mux.HandleFunc("/api/demo", a.demoHandler)
+	mux.HandleFunc("/api/demo", a.withAuth(a.demoHandler))
 	mux.HandleFunc("/api/login", a.loginHandler)
-	mux.HandleFunc("/api/config", a.configHandler)
-	mux.HandleFunc("/api/peers/add", a.addPeerHandler)
+	mux.HandleFunc("/api/config", a.withAuth(a.configHandler))
+	mux.HandleFunc("/api/peers/add", a.withAuth(a.addPeerHandler))
 
 	logger.Info("HTTP API listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
+}
+
+func (a *API) withAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return []byte(a.cfg.JWTSecret), nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	}
 }
 
 func (a *API) statsHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,8 +130,21 @@ func (a *API) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.User == a.cfg.AdminUser && req.Pass == a.cfg.AdminPass {
-		// In a real app, use a session/JWT. For now, just return success.
-		json.NewEncoder(w).Encode(map[string]any{"success": true})
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"user": req.User,
+			"exp":  time.Now().Add(24 * time.Hour).Unix(),
+		})
+
+		tokenString, err := token.SignedString([]byte(a.cfg.JWTSecret))
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"success": true,
+			"token":   tokenString,
+		})
 	} else {
 		json.NewEncoder(w).Encode(map[string]any{"success": false})
 	}

@@ -31,6 +31,7 @@ type Config struct {
 	NetworkKey        string   `json:"network_key"`
 	RebalanceEnabled  bool     `json:"rebalance_enabled"`
 	RebalanceInterval int      `json:"rebalance_interval"` // in seconds
+	JWTSecret         string   `json:"jwt_secret"`
 }
 
 func DefaultConfig() *Config {
@@ -54,6 +55,7 @@ func DefaultConfig() *Config {
 		NetworkKey:        "",
 		RebalanceEnabled:  true,
 		RebalanceInterval: 30,
+		JWTSecret:         "secret-jwt-key",
 	}
 }
 

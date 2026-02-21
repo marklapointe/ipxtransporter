@@ -93,7 +93,8 @@ A sample configuration file (`/etc/ipxtransporter.json`):
   "max_children": 5,
   "network_key": "secret-key",
   "rebalance_enabled": true,
-  "rebalance_interval": 30
+  "rebalance_interval": 30,
+  "jwt_secret": "secret-jwt-key"
 }
 ```
 

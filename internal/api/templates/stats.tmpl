@@ -131,6 +131,51 @@
         let vis_edges = new vis.DataSet([]);
         let selectedPeer = null;
 
+        function getAuthToken() {
+            return localStorage.getItem('ipx_jwt_token');
+        }
+
+        function setAuthToken(token) {
+            if (token) {
+                localStorage.setItem('ipx_jwt_token', token);
+            } else {
+                localStorage.removeItem('ipx_jwt_token');
+            }
+        }
+
+        async function authFetch(url, options = {}) {
+            const token = getAuthToken();
+            if (token) {
+                if (!options.headers) options.headers = {};
+                options.headers['Authorization'] = 'Bearer ' + token;
+            }
+            const resp = await fetch(url, options);
+            if (resp.status === 401) {
+                setAuthToken(null);
+                isAdmin = false;
+                updateAdminUI();
+            }
+            return resp;
+        }
+
+        function updateAdminUI() {
+            if (isAdmin) {
+                document.getElementById('login-btn').style.display = 'none';
+                document.getElementById('admin-status').style.display = 'inline';
+                document.getElementById('admin-config-area').style.display = 'block';
+                const adminHeaders = document.querySelectorAll('.admin-only-header');
+                adminHeaders.forEach(h => h.style.display = 'table-cell');
+            } else {
+                document.getElementById('login-btn').style.display = 'inline';
+                document.getElementById('admin-status').style.display = 'none';
+                document.getElementById('admin-config-area').style.display = 'none';
+                const adminHeaders = document.querySelectorAll('.admin-only-header');
+                adminHeaders.forEach(h => h.style.display = 'none');
+            }
+            // Trigger table update to show/hide manage buttons
+            loadStats();
+        }
+
         function initGraph() {
             const container = document.getElementById('network-graph');
             const data = { nodes: vis_nodes, edges: vis_edges };
@@ -158,13 +203,13 @@
         }
 
         async function setSort(field) {
-            await fetch('/api/sort?field=' + field);
+            await authFetch('/api/sort?field=' + field);
             loadStats();
         }
 
         async function loadStats() {
             try {
-                const resp = await fetch('/stats');
+                const resp = await authFetch('/stats');
                 const data = await resp.json();
 
                 document.getElementById('total-received').textContent = data.total_received;
@@ -338,12 +383,9 @@
             const res = await resp.json();
             if (res.success) {
                 isAdmin = true;
+                setAuthToken(res.token);
                 document.getElementById('login-modal').style.display = 'none';
-                document.getElementById('login-btn').style.display = 'none';
-                document.getElementById('admin-status').style.display = 'inline';
-                document.getElementById('admin-config-area').style.display = 'block';
-                document.querySelector('.admin-only-header').style.display = 'table-cell';
-                loadStats();
+                updateAdminUI();
             } else {
                 showToast("Login failed", "error");
             }
@@ -367,7 +409,7 @@
                 error_rate: parseInt(document.getElementById('demo-err-rate').value),
                 num_peers: parseInt(document.getElementById('demo-num-peers').value)
             };
-            await fetch('/api/demo', {
+            await authFetch('/api/demo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(props)
@@ -390,7 +432,7 @@
             if (networkKey !== undefined) body.network_key = networkKey;
             if (!isNaN(maxChildren)) body.max_children = maxChildren;
             
-            const resp = await fetch('/api/config', {
+            const resp = await authFetch('/api/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
@@ -408,7 +450,7 @@
             const addr = document.getElementById('manual-peer-addr').value;
             if (!addr) return;
             
-            const resp = await fetch('/api/peers/add', {
+            const resp = await authFetch('/api/peers/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ addr })
@@ -424,7 +466,7 @@
         };
 
         async function performAction(action) {
-            await fetch('/api/action', {
+            await authFetch('/api/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, id: selectedPeer })
@@ -436,8 +478,14 @@
         document.getElementById('btn-disconnect').onclick = () => performAction('disconnect');
         document.getElementById('btn-ban').onclick = () => performAction('ban');
 
+        // Initialize and check existing auth
+        if (getAuthToken()) {
+            isAdmin = true;
+            updateAdminUI();
+        } else {
+            loadStats();
+        }
         setInterval(loadStats, 3000);
-        loadStats();
     </script>
 </body>
 </html>

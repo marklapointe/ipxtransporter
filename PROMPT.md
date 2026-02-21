@@ -46,7 +46,7 @@
 - [x] Proper README.md and documentation cleanup
 - [x] Manual peer addition in TUI and Web UI (Persisted)
 - [x] Performance-based network rebalancing (Core-to-Edge optimization) with configurable interval and toggle
-- [x] Man page updated with all latest features and configuration options
+- [x] Persistent Web UI login using JWT tokens
 - [x] Unit tests (TDD) - *Partially implemented*
 - [x] Integration tests
 
