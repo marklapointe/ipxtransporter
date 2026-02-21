@@ -615,9 +615,16 @@ func (t *TUI) showSettings() {
 	form := tview.NewForm().
 		AddDropDown("Sort By", options, currentIndex, func(option string, optionIndex int) {
 			t.cfg.SortField = option
+			if t.configPath != "" {
+				config.SaveConfig(t.configPath, t.cfg)
+			}
 		}).
 		AddCheckbox("Reverse Sort", t.cfg.SortReverse, func(checked bool) {
 			t.cfg.SortReverse = checked
+			// Save immediately if we have a config path
+			if t.configPath != "" {
+				config.SaveConfig(t.configPath, t.cfg)
+			}
 		}).
 		AddButton("Close", func() {
 			t.pages.RemovePage("settings")

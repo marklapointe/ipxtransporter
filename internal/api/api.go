@@ -155,11 +155,8 @@ func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AdminPass != "" {
-		a.cfg.AdminPass = req.AdminPass
-	}
-	if req.MaxChildren > 0 {
-		a.cfg.MaxChildren = req.MaxChildren
+	if req.AdminPass != "" || req.MaxChildren > 0 {
+		a.srv.UpdateConfig(req.AdminPass, req.MaxChildren)
 	}
 	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }

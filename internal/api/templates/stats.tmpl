@@ -340,7 +340,6 @@
             });
             const res = await resp.json();
             if (res.success) {
-                alert("Settings updated successfully");
                 document.getElementById('new-admin-pass').value = '';
             } else {
                 alert("Failed to update settings");

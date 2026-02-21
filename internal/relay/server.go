@@ -299,6 +299,25 @@ func (s *Server) SetDemoMode(enabled bool) {
 
 func (s *Server) SetSortField(field string) {
 	s.cfg.SortField = field
+	s.persistConfig()
+}
+
+func (s *Server) UpdateConfig(adminPass string, maxChildren int) {
+	if adminPass != "" {
+		s.cfg.AdminPass = adminPass
+	}
+	if maxChildren > 0 {
+		s.cfg.MaxChildren = maxChildren
+	}
+	s.persistConfig()
+}
+
+func (s *Server) persistConfig() {
+	if s.configPath != "" {
+		if err := config.SaveConfig(s.configPath, s.cfg); err != nil {
+			log.Printf("Failed to save config: %v", err)
+		}
+	}
 }
 
 func (s *Server) UpdateDemoProps(packetRate, dropRate, errorRate, numPeers int) {
@@ -341,11 +360,7 @@ func (s *Server) BanPeer(id string, ip string) {
 	}
 
 	// Persist config immediately
-	if s.configPath != "" {
-		if err := config.SaveConfig(s.configPath, s.cfg); err != nil {
-			log.Printf("Failed to save config after ban: %v", err)
-		}
-	}
+	s.persistConfig()
 }
 
 func (s *Server) DisconnectPeer(id string) {

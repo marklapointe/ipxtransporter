@@ -7,10 +7,9 @@ package capture
 import (
 	"context"
 	"fmt"
-	"log"
-
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
+	"log"
 )
 
 type Capturer struct {

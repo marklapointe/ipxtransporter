@@ -35,8 +35,9 @@
 - [x] Configurable Admin Password in TUI and Web UI
 - [x] Human-readable uptime display (d/h/m/s) in TUI and Web UI
 - [x] Double-click to open action menu in TUI
-- [x] Max child connection limit (default 5) with consumption display and UI configuration
+- [x] Max child connection limit (default 5) with consumption display and UI configuration (Persisted)
 - [x] Truly random publicly routable IPv4/IPv6 addresses in demo mode
+- [x] Automatic configuration persistence for all settings changed via UI or API
 - [x] Examples directory with sample configuration and make install target
 - [x] Human-friendly Web UI fields (Connected at/Last seen) and split Children column
 - [x] Fixed Web UI demo settings reset issue during user editing
