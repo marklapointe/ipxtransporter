@@ -1,1 +1,21 @@
+# Binary
 /ipxtransporter
+
+# Distribution
+/dist/
+
+# JetBrains IDE
+.idea/
+/shelf/
+/workspace.xml
+/queries/
+/dataSources/
+/dataSources.local.xml
+/httpRequests/
+/go.imports.xml
+/ipxtransporter.iml
+/modules.xml
+/vcs.xml
+
+# Go
+/vendor/
