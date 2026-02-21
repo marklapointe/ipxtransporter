@@ -61,8 +61,9 @@
 
     <div id="admin-config-area" class="demo-controls" style="display: none;">
         <h3>Admin Settings</h3>
-        <label>Change Admin Password: <input type="password" id="new-admin-pass" placeholder="New Password" style="width: 150px;"></label>
-        <button id="apply-config" class="btn">Update Password</button>
+        <label>Admin Password: <input type="password" id="new-admin-pass" placeholder="New Password" style="width: 150px;"></label>
+        <label style="margin-left: 10px;">Max Children: <input type="number" id="admin-max-children" style="width: 50px;"></label>
+        <button id="apply-config" class="btn" style="margin-left: 10px;">Update Settings</button>
     </div>
 
     <h2>Connected Peers (<span id="peer-count">{{ len .Peers }}</span>)</h2>
@@ -165,6 +166,8 @@
                     updateInputIfNoFocus('demo-err-rate', data.demo_props.error_rate);
                     updateInputIfNoFocus('demo-num-peers', data.demo_props.num_peers);
                 }
+
+                updateInputIfNoFocus('admin-max-children', data.max_children || 5);
 
                 updateTable(data.peers);
                 updateGraph(data.peers);
@@ -323,11 +326,17 @@
 
         document.getElementById('apply-config').onclick = async () => {
             const pass = document.getElementById('new-admin-pass').value;
-            if (!pass) return;
+            const maxChildren = parseInt(document.getElementById('admin-max-children').value);
+            const body = {};
+            if (pass) body.admin_pass = pass;
+            if (!isNaN(maxChildren)) body.max_children = maxChildren;
+            
+            if (Object.keys(body).length === 0) return;
+            
             const resp = await fetch('/api/config', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ admin_pass: pass })
+                body: JSON.stringify(body)
             });
             const res = await resp.json();
             if (res.success) {

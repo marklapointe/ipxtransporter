@@ -1,0 +1,20 @@
+{
+  "interface": "eth0",
+  "listen_addr": ":8787",
+  "peers": [],
+  "tls_cert_path": "/etc/ipxtransporter/cert.pem",
+  "tls_key_path": "/etc/ipxtransporter/key.pem",
+  "disable_ssl": false,
+  "http_listen_addr": ":8080",
+  "enable_http": true,
+  "log_level": "info",
+  "dedup_cache_size": 64000,
+  "dedup_cache_ttl": 30,
+  "sort_field": "id",
+  "sort_reverse": false,
+  "banned_hosts": [],
+  "banned_ids": [],
+  "admin_user": "admin",
+  "admin_pass": "admin",
+  "max_children": 5
+}

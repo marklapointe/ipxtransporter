@@ -425,6 +425,9 @@ func (t *TUI) showConfigEditor() {
 		AddCheckbox("Enable HTTP", t.cfg.EnableHTTP, func(checked bool) { t.cfg.EnableHTTP = checked }).
 		AddCheckbox("Disable SSL", t.cfg.DisableSSL, func(checked bool) { t.cfg.DisableSSL = checked }).
 		AddPasswordField("Admin Password", t.cfg.AdminPass, 20, '*', func(text string) { t.cfg.AdminPass = text }).
+		AddInputField("Max Children", fmt.Sprintf("%d", t.cfg.MaxChildren), 5, tview.InputFieldInteger, func(text string) {
+			fmt.Sscanf(text, "%d", &t.cfg.MaxChildren)
+		}).
 		AddButton("Save", func() {
 			t.showSaveDialog()
 		}).

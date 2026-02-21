@@ -147,7 +147,8 @@ func (a *API) demoHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		AdminPass string `json:"admin_pass"`
+		AdminPass   string `json:"admin_pass"`
+		MaxChildren int    `json:"max_children"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
@@ -156,6 +157,9 @@ func (a *API) configHandler(w http.ResponseWriter, r *http.Request) {
 
 	if req.AdminPass != "" {
 		a.cfg.AdminPass = req.AdminPass
+	}
+	if req.MaxChildren > 0 {
+		a.cfg.MaxChildren = req.MaxChildren
 	}
 	json.NewEncoder(w).Encode(map[string]any{"success": true})
 }

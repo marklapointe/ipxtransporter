@@ -15,7 +15,7 @@ else ifeq ($(UNAME_S),FreeBSD)
     OS := FreeBSD
 endif
 
-.PHONY: help all build clean test deb rpm run run-daemon run-demo demo fmt vet install-deps man
+.PHONY: help all build clean test deb rpm run run-daemon run-demo demo fmt vet install-deps man install
 
 all: help
 
@@ -26,6 +26,7 @@ help:
 	@echo "Targets:"
 	@echo "  help           - Show this help message"
 	@echo "  build          - Build the binary ($(BINARY_NAME))"
+	@echo "  install        - Install the binary and default configuration"
 	@echo "  install-deps   - Install system dependencies (libpcap)"
 	@echo "  test           - Run unit tests"
 	@echo "  run            - Build and run in TUI mode (debug-only SSL)"
@@ -80,6 +81,15 @@ vet:
 
 man:
 	man ./ipxtransporter.8
+
+install: build
+ifeq ($(OS),Linux)
+	install -m 755 $(BINARY_NAME) /usr/local/bin/
+	[ -f /etc/ipxtransporter.json ] || install -m 644 examples/ipxtransporter.json.example /etc/ipxtransporter.json
+else ifeq ($(OS),FreeBSD)
+	install -m 755 $(BINARY_NAME) /usr/local/bin/
+	[ -f /usr/local/etc/ipxtransporter.json ] || install -m 644 examples/ipxtransporter.json.example /usr/local/etc/ipxtransporter.json
+endif
 
 clean:
 	rm -f $(BINARY_NAME)

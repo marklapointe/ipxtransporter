@@ -24,6 +24,7 @@ type Stats struct {
 	SortField      string        `json:"sort_field"`
 	SortReverse    bool          `json:"sort_reverse"`
 	ListenAddr     string        `json:"listen_addr"`
+	MaxChildren    int           `json:"max_children"`
 	DemoProps      *DemoProps    `json:"demo_props,omitzero"`
 }
 

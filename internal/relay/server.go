@@ -277,6 +277,7 @@ func (s *Server) CollectStats() stats.Stats {
 		SortField:      s.cfg.SortField,
 		SortReverse:    s.cfg.SortReverse,
 		ListenAddr:     s.cfg.ListenAddr,
+		MaxChildren:    s.cfg.MaxChildren,
 	}
 
 	if s.demoMode {
