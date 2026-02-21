@@ -1,0 +1,56 @@
+.TH IPXTRANSPORTER 8 "2026-02-20" "1.0.0" "IPXTransporter Manual"
+.SH NAME
+ipxtransporter \- High-performance, TLS-enabled IPX/SPX traffic daemon
+.SH SYNOPSIS
+.B ipxtransporter
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+IPXTransporter is a Go daemon that captures raw IPX/SPX packets, deduplicates them, and forwards them securely over TLS to peers. Peer traffic is injected back into the local network. It features a Terminal UI for live monitoring and an optional HTTP API for statistics.
+.SH OPTIONS
+.TP
+.BI \-\-config " path"
+Path to the JSON configuration file. (Default: /etc/ipxtransporter.json)
+.TP
+.BI \-\-interface " name"
+Network interface to capture from (e.g., eth0, em0). Overrides configuration file.
+.TP
+.BI \-\-listen " addr"
+TLS listen address (e.g., :8787). Overrides configuration file.
+.TP
+.B \-\-disable\-ssl
+Disable TLS (debug only). Overrides configuration file.
+.TP
+.B \-\-tui
+Enable Terminal UI mode (default: true).
+.TP
+.B \-\-demo
+Enable demo mode with fake traffic for UI testing.
+.SH TUI SHORTCUTS
+.TP
+.B F1
+Open configuration editor.
+.TP
+.B F2
+Select network interface.
+.TP
+.B F3
+Show detailed WHOIS information for selected peer.
+.TP
+.B +/-
+Zoom in/out on the traffic graph.
+.TP
+.B Ctrl+C
+Graceful exit.
+.SH FILES
+.TP
+.I /etc/ipxtransporter.json
+Default configuration file location on Linux.
+.TP
+.I /usr/local/etc/ipxtransporter.json
+Default configuration file location on FreeBSD.
+.SH SEE ALSO
+pcap(3)
+.SH AUTHOR
+mlapointe
+.SH LICENSE
+3-Clause BSD License

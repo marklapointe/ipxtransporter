@@ -6,8 +6,54 @@
 ### Title
 **IPXTransporter – High‑Performance, TLS‑Enabled IPX/SPX Traffic Daemon**
 
-### Summary (≤ 350 characters)
+### Status: Implementation in Progress
+- [x] Dual-mode operation (TUI/Daemon)
+- [x] Reliable packet capture (gopacket/pcap)
+- [x] TLS Peer Management (TLS 1.3)
+- [x] Deduplication logic
+- [x] Statistics aggregation & HTTP API
+- [x] Terminal UI (tview)
+- [x] Interface discovery and selection
+- [x] TUI Configuration editor and file browser
+- [x] TUI reorganization (stats at bottom, human-readable units)
+- [x] Demo mode for UI testing (--demo flag)
+- [x] Man page and documentation cleanup
+- [x] Network map and Whois lookup overlay
+- [x] TUI Traffic graph with colorful dots, full-width scaling, and dynamic time range (+/- zoom)
+- [x] Network map with English labels and improved markers
+- [x] Realistic demo mode with truly random publicly routable IPv4/IPv6 addresses
+- [x] Mouse support in TUI
+- [x] Sorting by various fields in TUI and Web UI
+- [x] Network topology graph in Web UI (vis.js) with hierarchical connectivity
+- [x] Node topology map in TUI with hierarchical connectivity
+- [x] Resizable network topology graph in Web UI
+- [x] Admin login and peer management (Ban/Disconnect) in Web UI
+- [x] Peer management menu in TUI (Disconnect/Ban/Whois) with mouse support
+- [x] Ban persistence and enforcement (by ID and Host/IP)
+- [x] Demo mode property adjustment in TUI and Web UI
+- [x] Dynamic mock peer count adjustment and network chaining in demo mode
+- [x] Configurable Admin Password in TUI and Web UI
+- [x] Human-readable uptime display (d/h/m/s) in TUI and Web UI
+- [x] Double-click to open action menu in TUI
+37.- [x] Max child connection limit (default 5) with consumption display
+38.- [x] Removed all placeholder domains (example.com, ipx.net) and use real IP/DNS in demo
+39.- [x] Human-friendly Web UI fields (Connected at/Last seen) and split Children column
+40.- [x] Fixed Web UI demo settings reset issue during user editing
+41.- [ ] Unit tests (TDD) - *Partially implemented*
+42.- [ ] Integration tests
+
+### Summary 
 IPXTransporter is a Go daemon that captures raw IPX/SPX packets, deduplicates them, and forwards them securely over TLS to peers. Peer traffic is injected back into the local network, and a responsive terminal UI (tview) plus an optional HTTP API delivers statistics in both JSON and a rendered HTML page, including a live list of connected peers.
+
+---
+
+### TDD & Testing Strategy
+This project follows Test-Driven Development (TDD) principles. Core logic is covered by unit tests:
+1. **Deduplication (`internal/relay/dedup_test.go`)**: Verifies the LRU-based deduplication and eviction.
+2. **Configuration (`internal/config/config_test.go`)**: Ensures defaults are applied and JSON loading works correctly.
+3. **Statistics (`internal/stats/stats_test.go`)**: Validates data aggregation and model integrity.
+
+*Note: Tests requiring `libpcap` may fail if the library is not installed on the build machine. Use mock-based or isolated tests for core logic.*
 
 ---
 
@@ -100,7 +146,8 @@ type PeerStat struct {
 | Endpoint          | Method | Content‑Type | Purpose |
 |-------------------|--------|--------------|---------|
 | `GET /stats`      | GET    | `application/json` | Raw data for scripts, dashboards, or the HTML view’s JavaScript. |
-| `GET /stats/html` | GET    | `text/html` | Renders a human‑friendly page showing the same statistics, **including a table of connected peers**. |
+| `GET /stats.html` | GET    | `text/html`        | Renders a human‑friendly page showing stats. |
+| `GET /`           | GET    | `text/html`        | Redirects to `/stats.html`. |
 
 > **Dual endpoints** keep the canonical JSON data source while providing an interactive browser view.
 
@@ -233,10 +280,19 @@ The TUI should present a `tview.Table` that updates every 500 ms with the same
 
 | Target | Action |
 |--------|--------|
-| `make` | Builds the binary (Linux/FreeBSD‑compatible). |
+| `make` | Displays help message (default). |
+| `make build` | Builds the binary (Linux/FreeBSD‑compatible). |
+| `make install-deps` | Installs system dependencies (`libpcap`) on Ubuntu/Debian and FreeBSD. |
+| `make run` | Runs the app in TUI mode with `--disable-ssl`. |
+| `make run-daemon` | Runs the app in daemon mode with `--disable-ssl`. |
+| `make run-demo` | Runs the app in TUI mode with demo data. |
+| `make demo` | Shortcut for `run-demo`. |
+| `make man` | Opens the man page. |
+| `make test` | Executes unit tests for core logic. |
+| `make fmt` | Formats the source code. |
+| `make vet` | Runs `go vet` for static analysis. |
 | `make deb` | Creates a Debian package in `dist/`. |
 | `make rpm` | Creates an RPM package in `dist/`. |
-| `make ports` | Generates a minimal FreeBSD port tree inside a `ports/` directory (no separate FreeBSD build target). |
 
 ---
 

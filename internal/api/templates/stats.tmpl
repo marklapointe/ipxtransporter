@@ -1,0 +1,358 @@
+<!--
+// SPDX-License-Identifier: BSD-3-Clause
+// IPXTransporter – Author: mlapointe
+// Statistics HTML template
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IPXTransporter – Stats</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; background-color: #f4f7f6; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .card { border: 1px solid #ddd; padding: 1rem; border-radius: 4px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; font-size: 0.9rem; color: #666; }
+        .card p { font-size: 1.5rem; margin: 0; font-weight: bold; color: #2c3e50; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: white; }
+        th, td { border: 1px solid #ddd; padding: 0.75rem; text-align: left; }
+        th { background: #ecf0f1; cursor: pointer; user-select: none; }
+        th:hover { background: #bdc3c7; }
+        #network-graph { width: 100%; height: 400px; border: 1px solid #ddd; margin-top: 1rem; background: white; border-radius: 4px; overflow: hidden; resize: vertical; }
+        .admin-only { display: none; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); }
+        .modal-content { background-color: white; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 300px; border-radius: 8px; }
+        .btn { padding: 5px 10px; cursor: pointer; border: none; border-radius: 4px; background: #3498db; color: white; }
+        #login-area { position: absolute; top: 2rem; right: 2rem; }
+        .btn-danger { background: #e74c3c; }
+        .btn:hover { opacity: 0.8; }
+        .demo-controls { margin-top: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 4px; background: #fffde7; }
+    </style>
+</head>
+<body>
+
+
+    <h1>IPXTransporter Statistics</h1>
+    <div id="login-area">
+        <button id="login-btn" class="btn">Admin Login</button>
+        <span id="admin-status" style="margin-left: 10px; font-weight: bold; color: #27ae60; display: none;">Logged In</span>
+    </div>
+    <div class="grid">
+        <div class="card"><h3>Total Packets Received</h3><p id="total-received">{{ .TotalReceived }}</p></div>
+        <div class="card"><h3>Total Packets Forwarded</h3><p id="total-forwarded">{{ .TotalForwarded }}</p></div>
+        <div class="card"><h3>Total Packets Dropped</h3><p id="total-dropped">{{ .TotalDropped }}</p></div>
+        <div class="card"><h3>Total Errors</h3><p id="total-errors">{{ .TotalErrors }}</p></div>
+        <div class="card"><h3>Uptime</h3><p id="uptime">{{ .UptimeStr }}</p></div>
+        <div class="card"><h3>Listen Address</h3><p id="listen-addr">{{ .ListenAddr }}</p></div>
+    </div>
+
+    <h2>Network Topology</h2>
+    <div id="network-graph"></div>
+
+    <div id="demo-area" class="demo-controls" style="display: none;">
+        <h3>Demo Mode Settings</h3>
+        <label>Packet Rate: <input type="number" id="demo-pkt-rate" style="width: 50px;"></label>
+        <label>Drop Rate: <input type="number" id="demo-drop-rate" style="width: 50px;"></label>
+        <label>Error Rate: <input type="number" id="demo-err-rate" style="width: 50px;"></label>
+        <label>Num Peers: <input type="number" id="demo-num-peers" style="width: 50px;"></label>
+        <button id="apply-demo" class="btn">Apply</button>
+    </div>
+
+    <div id="admin-config-area" class="demo-controls" style="display: none;">
+        <h3>Admin Settings</h3>
+        <label>Change Admin Password: <input type="password" id="new-admin-pass" placeholder="New Password" style="width: 150px;"></label>
+        <button id="apply-config" class="btn">Update Password</button>
+    </div>
+
+    <h2>Connected Peers (<span id="peer-count">{{ len .Peers }}</span>)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th onclick="setSort('id')">ID</th>
+                <th onclick="setSort('ip')">IP</th>
+                <th onclick="setSort('hostname')">Hostname</th>
+                <th onclick="setSort('connected')">Connected At</th>
+                <th onclick="setSort('last_seen')">Last Seen</th>
+                <th onclick="setSort('children')">Children</th>
+                <th onclick="setSort('sent_bytes')">Sent (bytes)</th>
+                <th onclick="setSort('recv_bytes')">Recv (bytes)</th>
+                <th onclick="setSort('sent_pkts')">Sent (pkts)</th>
+                <th onclick="setSort('recv_pkts')">Recv (pkts)</th>
+                <th onclick="setSort('errors')">Errors</th>
+                <th class="admin-only-header" style="display: none;">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="peer-table-body">
+        </tbody>
+    </table>
+
+    <div id="login-modal" class="modal">
+        <div class="modal-content">
+            <h3>Admin Login</h3>
+            <input type="text" id="username" placeholder="Username" style="width: 100%; margin-bottom: 10px;">
+            <input type="password" id="password" placeholder="Password" style="width: 100%; margin-bottom: 10px;">
+            <button id="do-login" class="btn" style="width: 100%;">Login</button>
+            <button onclick="document.getElementById('login-modal').style.display='none'" class="btn btn-danger" style="width: 100%; margin-top: 5px;">Cancel</button>
+        </div>
+    </div>
+
+    <div id="action-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="action-title">Peer Action</h3>
+            <p id="action-peer-id"></p>
+            <button id="btn-disconnect" class="btn" style="width: 100%; margin-bottom: 5px;">Disconnect</button>
+            <button id="btn-ban" class="btn btn-danger" style="width: 100%; margin-bottom: 5px;">Ban Host & ID</button>
+            <button onclick="document.getElementById('action-modal').style.display='none'" class="btn" style="width: 100%; background: #95a5a6;">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        let isAdmin = false;
+        let network = null;
+        let vis_nodes = new vis.DataSet([]);
+        let vis_edges = new vis.DataSet([]);
+        let selectedPeer = null;
+
+        function initGraph() {
+            const container = document.getElementById('network-graph');
+            const data = { nodes: vis_nodes, edges: vis_edges };
+            const options = {
+                nodes: { shape: 'dot', size: 16, font: { size: 12 } },
+                edges: { arrows: 'to' },
+                physics: { stabilization: true }
+            };
+            network = new vis.Network(container, data, options);
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    const peerId = params.nodes[0];
+                    if (peerId === 'Local') return;
+                    if (isAdmin) {
+                        showActionModal(peerId);
+                    }
+                }
+            });
+        }
+
+        function showActionModal(peerId) {
+            selectedPeer = peerId;
+            document.getElementById('action-title').textContent = "Action for " + peerId;
+            document.getElementById('action-modal').style.display = 'block';
+        }
+
+        async function setSort(field) {
+            await fetch('/api/sort?field=' + field);
+            loadStats();
+        }
+
+        async function loadStats() {
+            try {
+                const resp = await fetch('/stats');
+                const data = await resp.json();
+
+                document.getElementById('total-received').textContent = data.total_received;
+                document.getElementById('total-forwarded').textContent = data.total_forwarded;
+                document.getElementById('total-dropped').textContent = data.total_dropped;
+                document.getElementById('total-errors').textContent = data.total_errors;
+                document.getElementById('uptime').textContent = data.uptime_str;
+                document.getElementById('listen-addr').textContent = data.listen_addr;
+                document.getElementById('peer-count').textContent = data.peers ? data.peers.length : 0;
+
+                if (data.demo_props) {
+                    document.getElementById('demo-area').style.display = 'block';
+                    updateInputIfNoFocus('demo-pkt-rate', data.demo_props.packet_rate);
+                    updateInputIfNoFocus('demo-drop-rate', data.demo_props.drop_rate);
+                    updateInputIfNoFocus('demo-err-rate', data.demo_props.error_rate);
+                    updateInputIfNoFocus('demo-num-peers', data.demo_props.num_peers);
+                }
+
+                updateTable(data.peers);
+                updateGraph(data.peers);
+            } catch (e) {
+                console.error("Failed to load stats:", e);
+            }
+        }
+
+        // Add resize observer to network graph for vis.js
+        const resizeObserver = new ResizeObserver(() => {
+            if (network) network.setSize('100%', '100%');
+        });
+        resizeObserver.observe(document.getElementById('network-graph'));
+
+        function updateTable(peers) {
+            const tbody = document.getElementById('peer-table-body');
+            tbody.innerHTML = '';
+            if (!peers || peers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11">No peers connected.</td></tr>';
+                return;
+            }
+            peers.forEach(p => {
+	const tr = document.createElement('tr');
+	let consumption = 0;
+	if (p.max_children > 0) {
+		consumption = (p.num_children / p.max_children * 100).toFixed(1);
+	}
+	tr.innerHTML = `
+		<td>${p.id}</td>
+		<td>${p.ip}</td>
+		<td>${p.hostname}</td>
+		<td>${formatTime(p.connected_at)}</td>
+		<td>${formatTimeAgo(p.last_seen)}</td>
+		<td>${p.num_children}/${p.max_children} (${consumption}%)</td>
+		<td>${formatBytes(p.sent_bytes)}</td>
+		<td>${formatBytes(p.recv_bytes)}</td>
+		<td>${p.sent_pkts}</td>
+		<td>${p.recv_pkts}</td>
+		<td>${p.errors}</td>
+		<td style="display: ${isAdmin ? 'table-cell' : 'none'}">
+			<button class="btn btn-danger" onclick="showActionModal('${p.id}')">Manage</button>
+		</td>
+	`;
+	tbody.appendChild(tr);
+            });
+        }
+
+        function updateGraph(peers) {
+            if (!network) initGraph();
+            
+            const currentNodes = [{ id: 'Local', label: 'Local Node', color: '#2ecc71', level: 0 }];
+            const currentEdges = [];
+
+            if (peers) {
+                peers.forEach((p, index) => {
+                    currentNodes.push({ id: p.id, label: p.hostname || p.id });
+                    
+                    // Use parent_id for hierarchical topology if available
+                    let parent = p.parent_id || 'Local';
+                    
+                    // Connection to Parent
+                    currentEdges.push({ 
+                        id: parent + '-' + p.id, 
+                        from: parent, 
+                        to: p.id, 
+                        label: formatBytes(p.sent_bytes),
+                        font: { size: 10, color: '#666' }
+                    });
+                });
+            }
+
+            vis_nodes.update(currentNodes);
+            vis_edges.update(currentEdges);
+            
+            // Remove old nodes
+            const nodeIds = vis_nodes.getIds();
+            const peerIds = peers ? peers.map(p => p.id) : [];
+            nodeIds.forEach(id => {
+                if (id !== 'Local' && !peerIds.includes(id)) {
+                    vis_nodes.remove(id);
+                }
+            });
+        }
+
+        function formatBytes(b) {
+            if (b < 1024) return b + " B";
+            if (b < 1024*1024) return (b/1024).toFixed(1) + " KB";
+            return (b/(1024*1024)).toFixed(1) + " MB";
+        }
+
+        function formatTimeAgo(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffSec = Math.round(diffMs / 1000);
+            if (diffSec < 0) return "0s";
+            if (diffSec < 60) return diffSec + "s";
+            if (diffSec < 3600) return Math.floor(diffSec / 60) + "m " + (diffSec % 60) + "s";
+            return Math.floor(diffSec / 3600) + "h " + Math.floor((diffSec % 3600) / 60) + "m";
+        }
+
+        function formatTime(dateStr) {
+            const date = new Date(dateStr);
+            return date.getHours().toString().padStart(2, '0') + ":" + 
+                   date.getMinutes().toString().padStart(2, '0') + ":" + 
+                   date.getSeconds().toString().padStart(2, '0');
+        }
+
+        function updateInputIfNoFocus(id, value) {
+            const el = document.getElementById(id);
+            if (document.activeElement !== el) {
+                el.value = value;
+            }
+        }
+
+        document.getElementById('login-btn').onclick = () => {
+            document.getElementById('login-modal').style.display = 'block';
+        };
+
+        document.getElementById('do-login').onclick = async () => {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const resp = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user, pass })
+            });
+            const res = await resp.json();
+            if (res.success) {
+                isAdmin = true;
+                document.getElementById('login-modal').style.display = 'none';
+                document.getElementById('login-btn').style.display = 'none';
+                document.getElementById('admin-status').style.display = 'inline';
+                document.getElementById('admin-config-area').style.display = 'block';
+                document.querySelector('.admin-only-header').style.display = 'table-cell';
+                loadStats();
+            } else {
+                alert("Login failed");
+            }
+        };
+
+        document.getElementById('apply-demo').onclick = async () => {
+            const props = {
+                packet_rate: parseInt(document.getElementById('demo-pkt-rate').value),
+                drop_rate: parseInt(document.getElementById('demo-drop-rate').value),
+                error_rate: parseInt(document.getElementById('demo-err-rate').value),
+                num_peers: parseInt(document.getElementById('demo-num-peers').value)
+            };
+            await fetch('/api/demo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(props)
+            });
+            loadStats();
+        };
+
+        document.getElementById('apply-config').onclick = async () => {
+            const pass = document.getElementById('new-admin-pass').value;
+            if (!pass) return;
+            const resp = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_pass: pass })
+            });
+            const res = await resp.json();
+            if (res.success) {
+                alert("Settings updated successfully");
+                document.getElementById('new-admin-pass').value = '';
+            } else {
+                alert("Failed to update settings");
+            }
+        };
+
+        async function performAction(action) {
+            await fetch('/api/action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, id: selectedPeer })
+            });
+            document.getElementById('action-modal').style.display = 'none';
+            loadStats();
+        }
+
+        document.getElementById('btn-disconnect').onclick = () => performAction('disconnect');
+        document.getElementById('btn-ban').onclick = () => performAction('ban');
+
+        setInterval(loadStats, 3000);
+        loadStats();
+    </script>
+</body>
+</html>
